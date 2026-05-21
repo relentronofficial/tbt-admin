@@ -1,0 +1,268 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Admin {
+  id                 String        @id @default(uuid())
+  adminId            String        @unique
+  fullName           String
+  email              String        @unique
+  contactNumber      String
+  alternateContact   String?
+  dateOfBirth        DateTime?
+  bloodGroup         String?
+  profilePhoto       String?
+  role               Role          @default(Viewer)
+  department         String?
+  designation        String?
+  employeeId         String?       @unique
+  country            String        @default("India")
+  state              String        @default("Tamil Nadu")
+  city               String        @default("Chennai")
+  address            String?
+  username           String        @unique
+  accountStatus      AccountStatus @default(Active)
+  twoFactorEnabled   Boolean       @default(false)
+  notes              String?
+  tags               String[]
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  lastLogin          DateTime?
+  reportingManagerId String?
+  reportingManager   Admin?        @relation("ManagerToAdmin", fields: [reportingManagerId], references: [id])
+  subordinates       Admin[]       @relation("ManagerToAdmin")
+  rbac               RBAC[]
+  assignedTasks      Task[]        @relation("AssignedTo")
+  createdTasks       Task[]        @relation("AssignedBy")
+  hostedWebinars     Webinar[]     @relation("WebinarHost")
+}
+
+model Course {
+  id            String       @id @default(uuid())
+  courseId      String       @unique
+  title         String
+  description   String?
+  category      String?
+  curriculum    Json?
+  totalDuration Int?
+  totalLessons  Int?
+  instructor    String?
+  status        CourseStatus @default(Draft)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+model Post {
+  id        String   @id @default(uuid())
+  postId    String   @unique
+  content   String
+  mediaUrls String[]
+  type      PostType @default(Post)
+  isPinned  Boolean  @default(false)
+  authorId  String?  @db.Uuid
+  author    Member?  @relation(fields: [authorId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Webinar {
+  id             String        @id @default(uuid())
+  webinarId      String        @unique
+  title          String
+  description    String?
+  hostId         String?
+  host           Admin?        @relation("WebinarHost", fields: [hostId], references: [id])
+  scheduledAt    DateTime
+  duration       Int?
+  status         WebinarStatus @default(Scheduled)
+  agoraChannelId String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  title     String
+  body      String
+  type      NotificationType @default(System)
+  isRead    Boolean          @default(false)
+  metadata  Json?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+}
+
+model Task {
+  id           String     @id @default(uuid())
+  taskId       String     @unique
+  title        String
+  description  String?
+  priority     Priority   @default(Medium)
+  status       TaskStatus @default(Todo)
+  dueDate      DateTime?
+  completedAt  DateTime?
+  assignedToId String?
+  assignedTo   Admin?     @relation("AssignedTo", fields: [assignedToId], references: [id])
+  assignedById String?
+  assignedBy   Admin?     @relation("AssignedBy", fields: [assignedById], references: [id])
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@map("tasks")
+}
+
+model adminIdSequence {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+}
+
+model RBAC {
+  id        String  @id @default(uuid())
+  adminId   String
+  module    String
+  canView   Boolean @default(false)
+  canCreate Boolean @default(false)
+  canEdit   Boolean @default(false)
+  canDelete Boolean @default(false)
+  admin     Admin   @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@unique([adminId, module])
+}
+
+model wrappers_fdw_stats {
+  fdw_name     String   @id
+  create_times BigInt?
+  rows_in      BigInt?
+  rows_out     BigInt?
+  bytes_in     BigInt?
+  bytes_out    BigInt?
+  metadata     Json?
+  created_at   DateTime @default(dbgenerated("timezone('utc'::text, now())")) @db.Timestamptz(6)
+  updated_at   DateTime @default(dbgenerated("timezone('utc'::text, now())")) @db.Timestamptz(6)
+}
+
+model Manager {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name            String
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  assignedMembers Member[] @relation("ManagerAssigned")
+  createdMembers  Member[] @relation("ManagerCreator")
+
+  @@map("managers")
+}
+
+model Member {
+  id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId               String    @unique @map("member_id")
+  profilePhotoUrl        String?   @map("profile_photo_url")
+  firstName              String    @map("first_name")
+  secondName             String?   @map("second_name")
+  dob                    DateTime? @db.Date
+  gender                 String?
+  email                  String    @unique
+  phone                  String?
+  city                   String?
+  state                  String?
+  pincode                String?
+  businessName           String?   @map("business_name")
+  businessEstablishedOn  DateTime? @map("business_established_on") @db.Date
+  productServiceType     String?   @map("product_service_type")
+  instagramLink          String?   @map("instagram_link")
+  annualTurnover         String?   @map("annual_turnover")
+  goalAfter90Days        String?   @map("goal_after_90_days")
+  preferredSessionMode   String?   @map("preferred_session_mode")
+  gstNumber              String?   @map("gst_number")
+  marketingChannels      String[]  @map("marketing_channels")
+  marketingChannelName   String?   @map("marketing_channel_name")
+  domainHostingDetails   String?   @map("domain_hosting_details")
+  businessAddress        String?   @map("business_address")
+  challenge1             String?   @map("challenge_1")
+  challenge2             String?   @map("challenge_2")
+  challenge3             String?   @map("challenge_3")
+  hasSocialMediaManager  Boolean   @default(false) @map("has_social_media_manager")
+  socialMediaManagerNote String?   @map("social_media_manager_note")
+  hasVideoEditing        Boolean   @default(false) @map("has_video_editing")
+  videoEditingNote       String?   @map("video_editing_note")
+  notes                  String?
+  membershipPlan         String    @default("Standard (Annual)") @map("membership_plan")
+  status                 String    @default("Active")
+  verificationStatus     String    @default("AWAITING KYC") @map("verification_status")
+  accountManagerId       String?   @map("account_manager_id") @db.Uuid
+  task                   String?
+  assignedById           String?   @map("assigned_by_id") @db.Uuid
+  assignedAt             DateTime? @map("assigned_at") @db.Timestamptz(6)
+  kycDocumentUrl         String?   @map("kyc_document_url")
+  enrolledCourses        String[]  @default([])
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  accountManager         Manager?  @relation("ManagerAssigned", fields: [accountManagerId], references: [id])
+  assignedBy             Manager?  @relation("ManagerCreator", fields: [assignedById], references: [id])
+  posts                  Post[]
+
+  @@map("members")
+}
+
+enum Role {
+  SuperAdmin
+  Manager
+  Moderator
+  Viewer
+}
+
+enum AccountStatus {
+  Active
+  Inactive
+  Suspended
+}
+
+enum MembershipStatus {
+  Active
+  Inactive
+  Expired
+}
+
+enum CourseStatus {
+  Draft
+  Published
+  Archived
+}
+
+enum Priority {
+  Low
+  Medium
+  High
+  Critical
+}
+
+enum TaskStatus {
+  Todo
+  InProgress
+  Review
+  Done
+}
+
+enum PostType {
+  Post
+  Announcement
+  Poll
+}
+
+enum WebinarStatus {
+  Scheduled
+  Live
+  Ended
+}
+
+enum NotificationType {
+  System
+  Course
+  Task
+  Community
+  Webinar
+}
