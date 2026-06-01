@@ -14,21 +14,20 @@ async function main() {
 
   console.log('🌱 Seeding Super Admin...');
 
-  // 1. Handle Clerk User Creation
   let clerkUserId = '';
   try {
-    console.log(`☁️ Checking Clerk for user with email: ${email}...`);
+    console.log(`☁️  Checking Clerk for user: ${email}...`);
     const users = await clerk.users.getUserList({ emailAddress: [email] });
-    
-    if (users.length > 0) {
-      console.log('⚠️ User already exists in Clerk. Updating password...');
-      clerkUserId = users[0].id;
+
+    if (users.data.length > 0) {
+      console.log('⚠️  User already exists in Clerk. Updating password...');
+      clerkUserId = users.data[0].id;
       await clerk.users.updateUser(clerkUserId, {
         password,
         username,
         skipPasswordChecks: true,
       });
-      console.log('✅ Clerk user updated successfully!');
+      console.log('✅ Clerk user updated.');
     } else {
       console.log('✨ Creating user in Clerk...');
       const newUser = await clerk.users.createUser({
@@ -40,65 +39,76 @@ async function main() {
         skipPasswordChecks: true,
       });
       clerkUserId = newUser.id;
-      console.log('✅ Clerk user created successfully!');
+      console.log('✅ Clerk user created.');
     }
 
-    // Force verify the email
+    // Verify the email
     const updatedUser = await clerk.users.getUser(clerkUserId);
     for (const emailObj of updatedUser.emailAddresses) {
       if (emailObj.emailAddress === email && emailObj.verification?.status !== 'verified') {
-        console.log(`🔧 Verifying email: ${email}`);
         await clerk.emailAddresses.updateEmailAddress(emailObj.id, {
           verified: true,
-          primary: true
+          primary: true,
         });
-        console.log('✅ Email marked as verified.');
+        console.log('✅ Email verified.');
       }
     }
   } catch (error: any) {
     console.error('❌ Clerk operation failed:', error.message);
+    process.exit(1);
   }
 
-  // 2. Handle Prisma Database Seeding
-  const existingAdmin = await prisma.admin.findUnique({
-    where: { username },
+  if (!clerkUserId) {
+    console.error('❌ Could not resolve Clerk user ID. Aborting.');
+    process.exit(1);
+  }
+
+  // Upsert the DB record using the correct schema field names
+  const existing = await prisma.admin.findFirst({
+    where: { OR: [{ username }, { email }] },
   });
 
-  if (existingAdmin) {
-    console.log('⚠️ Super Admin already exists in database.');
+  if (existing) {
+    // Update clerkId if it's missing (in case seed was run before fix)
+    if (!existing.clerkId || existing.clerkId !== clerkUserId) {
+      await prisma.admin.update({
+        where: { id: existing.id },
+        data: { clerkId: clerkUserId },
+      });
+      console.log('✅ Existing DB record updated with correct clerkId.');
+    } else {
+      console.log('⚠️  Super Admin already exists in DB — skipped.');
+    }
   } else {
+    // Generate sequence ID
+    const sequence = await prisma.adminIdSequence.create({ data: {} });
+    const employeeId = `TBT-ADMIN-${new Date().getFullYear()}-${String(sequence.id).padStart(4, '0')}`;
+
     await prisma.admin.create({
       data: {
-        adminId: 'TBT-ADMIN-2026-0001',
-        fullName: 'Sakthi SuperAdmin',
-        email: email,
-        contactNumber: '+919876543210',
-        username: username,
-        role: 'SuperAdmin',
-        accountStatus: 'Active',
+        clerkId: clerkUserId,
+        employeeId,
+        fullName: 'Manoj Admin',
+        email,
+        phone: '+919876543210',
+        username,
+        role: 'super_admin',
+        status: 'active',
         department: 'Technology',
         designation: 'Chief Architect',
-        rbac: {
-          create: [
-            { module: 'LMS', canView: true, canCreate: true, canEdit: true, canDelete: true },
-            { module: 'Tasks', canView: true, canCreate: true, canEdit: true, canDelete: true },
-            { module: 'Community', canView: true, canCreate: true, canEdit: true, canDelete: true },
-            { module: 'Webinar', canView: true, canCreate: true, canEdit: true, canDelete: true },
-          ],
-        },
+        country: 'India',
       },
     });
-    console.log('✅ Database record created successfully!');
+    console.log('✅ Super Admin DB record created.');
   }
 
   console.log(`
-    🎉 Super Admin Setup Complete!
-    ------------------------------
-    Username: ${username}
-    Password: ${password}
-    Role: SuperAdmin
-    Email: ${email}
-    ------------------------------
+🎉 Super Admin Setup Complete!
+------------------------------
+Username : ${username}
+Password : ${password}
+Email    : ${email}
+------------------------------
   `);
 }
 

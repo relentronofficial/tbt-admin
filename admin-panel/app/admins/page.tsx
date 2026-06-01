@@ -50,20 +50,26 @@ export default function AdminsListPage() {
     );
   }
 
+  const formatLabel = (value: string) =>
+    value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'Active': return 'text-green-500 bg-green-500/10 border-green-500/20';
-      case 'Inactive': return 'text-yellow-500 bg-yellow-500/10 border-yellow-500/20';
-      case 'Suspended': return 'text-red-500 bg-red-500/10 border-red-500/20';
+      case 'active': return 'text-green-500 bg-green-500/10 border-green-500/20';
+      case 'inactive': return 'text-yellow-500 bg-yellow-500/10 border-yellow-500/20';
+      case 'suspended': return 'text-red-500 bg-red-500/10 border-red-500/20';
+      case 'pending_approval': return 'text-yellow-500 bg-yellow-500/10 border-yellow-500/20';
       default: return 'text-gray-500 bg-gray-500/10 border-gray-500/20';
     }
   };
 
   const getRoleColor = (role: string) => {
     switch (role) {
-      case 'SuperAdmin': return 'text-[#e02020] border-[#e02020]/30 bg-[#e02020]/5';
-      case 'Manager': return 'text-blue-500 border-blue-500/30 bg-blue-500/5';
-      case 'Moderator': return 'text-purple-500 border-purple-500/30 bg-purple-500/5';
+      case 'super_admin': return 'text-[#e02020] border-[#e02020]/30 bg-[#e02020]/5';
+      case 'admin': return 'text-orange-500 border-orange-500/30 bg-orange-500/5';
+      case 'account_manager': return 'text-blue-500 border-blue-500/30 bg-blue-500/5';
+      case 'mentor': return 'text-green-500 border-green-500/30 bg-green-500/5';
+      case 'moderator': return 'text-purple-500 border-purple-500/30 bg-purple-500/5';
       default: return 'text-gray-400 border-gray-400/30 bg-gray-400/5';
     }
   };
@@ -95,8 +101,8 @@ export default function AdminsListPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
            {[
              { label: 'Total Admins', value: total, icon: Shield, color: 'text-[#e02020]' },
-             { label: 'Active Sessions', value: admins.filter((a:any) => a.accountStatus === 'Active').length, icon: Clock, color: 'text-green-500' },
-             { label: 'Super Admins', value: admins.filter((a:any) => a.role === 'SuperAdmin').length, icon: User, color: 'text-blue-500' },
+             { label: 'Active Sessions', value: admins.filter((a:any) => a.status === 'active').length, icon: Clock, color: 'text-green-500' },
+             { label: 'Super Admins', value: admins.filter((a:any) => a.role === 'super_admin').length, icon: User, color: 'text-blue-500' },
              { label: 'Pending Review', value: 0, icon: Filter, color: 'text-yellow-500' }
            ].map((stat, i) => (
              <div key={i} className="bg-[#181818] border border-[#2a2a2a] p-4 rounded-xl flex items-center gap-4">
@@ -174,8 +180,8 @@ export default function AdminsListPage() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-lg bg-[#1f1f1f] border border-[#333] flex-shrink-0 overflow-hidden relative group-hover:border-[#e02020]/30 transition-colors">
-                            {admin.profilePhoto ? (
-                              <img src={admin.profilePhoto} alt="" className="w-full h-full object-cover" />
+                            {admin.profilePhotoUrl ? (
+                              <img src={admin.profilePhotoUrl} alt="" className="w-full h-full object-cover" />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-[#333]">
                                 <User size={20} />
@@ -193,16 +199,16 @@ export default function AdminsListPage() {
                       </td>
                       <td className="px-6 py-4">
                         <span className="font-rajdhani font-bold text-[12px] tracking-[1px] text-[#a0a0a0] bg-[#1a1a1a] px-2 py-1 rounded border border-[#333]">
-                          {admin.adminId}
+                          {admin.employeeId}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-center">
                         <div className={cn(
                           "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider font-rajdhani",
-                          getStatusColor(admin.accountStatus)
+                          getStatusColor(admin.status)
                         )}>
-                          {admin.accountStatus === 'Active' ? <CheckCircle2 size={10} /> : <Clock size={10} />}
-                          {admin.accountStatus}
+                          {admin.status === 'active' ? <CheckCircle2 size={10} /> : <Clock size={10} />}
+                          {formatLabel(admin.status || '')}
                         </div>
                       </td>
                       <td className="px-6 py-4">
@@ -211,7 +217,7 @@ export default function AdminsListPage() {
                           getRoleColor(admin.role)
                         )}>
                           <Shield size={10} />
-                          {admin.role}
+                          {formatLabel(admin.role || '')}
                         </div>
                       </td>
                       <td className="px-6 py-4">
@@ -222,10 +228,10 @@ export default function AdminsListPage() {
                       </td>
                       <td className="px-6 py-4 text-right">
                         <p className="text-[11px] text-[#f0f0f0] font-medium font-rajdhani">
-                          {admin.lastLogin ? format(new Date(admin.lastLogin), 'dd MMM yyyy') : 'Never'}
+                          {admin.lastLoginAt ? format(new Date(admin.lastLoginAt), 'dd MMM yyyy') : 'Never'}
                         </p>
                         <p className="text-[9px] text-[#606060] uppercase tracking-tighter mt-0.5 font-rajdhani">
-                          {admin.lastLogin ? format(new Date(admin.lastLogin), 'HH:mm:ss') : '--:--:--'}
+                          {admin.lastLoginAt ? format(new Date(admin.lastLoginAt), 'HH:mm:ss') : '--:--:--'}
                         </p>
                       </td>
                       <td className="px-6 py-4 text-right">

@@ -46,7 +46,7 @@ export const useSearchManagers = (q: string) => {
     queryKey: ['managers', q],
     queryFn: async () => {
       if (!q) return [];
-      const res: any = await apiClient.get(`/api/admins/search?q=${q}&role=Manager,SuperAdmin`);
+      const res: any = await apiClient.get(`/api/admins/search?q=${q}&role=account_manager,super_admin`);
       return Array.isArray(res) ? res : (res.data || []);
     },
     enabled: q.length > 2,

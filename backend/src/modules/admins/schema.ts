@@ -1,49 +1,34 @@
 import { z } from 'zod';
 
 export const createAdminSchema = z.object({
-  adminId: z.string(),
   fullName: z.string().min(2).max(100),
   email: z.string().email(),
-  contactNumber: z.string(),
-  alternateContact: z.string().optional(),
-  dateOfBirth: z.string().optional(),
+  phone: z.string().optional(),
+  alternatePhone: z.string().optional(),
+  dob: z.string().optional(),
   bloodGroup: z.string().optional(),
-  profilePhoto: z.string().optional(),
-  role: z.string(),
-  department: z.string(),
+  profilePhotoUrl: z.string().optional(),
+  role: z.enum(['super_admin', 'admin', 'account_manager', 'mentor', 'moderator']),
+  department: z.string().optional(),
   designation: z.string().optional(),
   reportingManagerId: z.string().optional(),
   employeeId: z.string().optional(),
-  country: z.string(),
-  state: z.string(),
-  district: z.string(),
-  city: z.string(),
-  address: z.string().min(10),
+  country: z.string().optional(),
+  state: z.string().optional(),
+  city: z.string().optional(),
+  address: z.string().optional(),
   username: z.string().min(4).max(30),
-  accountStatus: z.string(),
-  password: z.string().min(8),
-  twoFactorEnabled: z.boolean().default(false),
+  status: z.enum(['active', 'inactive', 'suspended', 'pending_approval']).default('active'),
   notes: z.string().optional(),
   tags: z.array(z.string()).optional(),
-  rbac: z.array(z.object({
-    module: z.string(),
-    canView: z.boolean(),
-    canCreate: z.boolean(),
-    canEdit: z.boolean(),
-    canDelete: z.boolean(),
-  })).optional(),
+  permissions: z.record(z.any()).optional(),
+  password: z.string().min(8).optional(), // Used for Clerk user creation if needed
 });
 
 export const updateAdminSchema = createAdminSchema.partial();
 
 export const updateStatusSchema = z.object({
-  status: z.enum(['Active', 'Inactive', 'Suspended']),
+  status: z.enum(['active', 'inactive', 'suspended', 'pending_approval']),
 });
 
-export const updateRBACSchema = z.array(z.object({
-  module: z.string(),
-  canView: z.boolean(),
-  canCreate: z.boolean(),
-  canEdit: z.boolean(),
-  canDelete: z.boolean(),
-}));
+export const updateRBACSchema = z.record(z.any());

@@ -46,7 +46,7 @@ const MARKETING_CHANNELS = ["SEO", "Paid Ads", "Social Media", "Email", "Referra
 // Expanded Zod Schema for Member Update - ALL FIELDS
 const memberUpdateSchema = z.object({
   firstName: z.string().min(1, "First Name is required"),
-  secondName: z.string().optional().or(z.literal("")),
+  lastName: z.string().optional().or(z.literal("")),
   dob: z.string().optional().or(z.literal("")).nullable(),
   gender: z.string().optional().or(z.literal("")),
   email: z.string().email("Valid email is required"),
@@ -74,9 +74,9 @@ const memberUpdateSchema = z.object({
   hasVideoEditing: z.boolean().default(false),
   videoEditingNote: z.string().optional().or(z.literal("")),
   notes: z.string().optional().or(z.literal("")),
-  membershipPlan: z.string().default("Standard (Annual)"),
-  status: z.string().default("Active"),
-  verificationStatus: z.string().default("AWAITING KYC"),
+  membershipPlan: z.string().default("free"),
+  status: z.string().default("active"),
+  verificationStatus: z.string().default("awaiting_kyc"),
   accountManagerId: z.string().optional().or(z.literal("")),
   task: z.string().optional().or(z.literal("")),
 });
@@ -140,7 +140,7 @@ export default function MembersListPage() {
     if (editingMember) {
       reset({
         firstName: editingMember.firstName,
-        secondName: editingMember.secondName || "",
+        secondName: editingMember.lastName || "",
         dob: editingMember.dob ? new Date(editingMember.dob).toISOString().split('T')[0] : "",
         gender: editingMember.gender || "",
         email: editingMember.email,
@@ -197,22 +197,27 @@ export default function MembersListPage() {
     }
   };
 
+  const formatLabel = (value: string) =>
+    value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'Active': return 'text-green-500 bg-green-500/10 border-green-500/20';
-      case 'Inactive': return 'text-yellow-500 bg-yellow-500/10 border-yellow-500/20';
-      case 'Suspended': return 'text-red-500 bg-red-500/10 border-red-500/20';
-      case 'Pending': return 'text-gray-400 bg-gray-400/10 border-gray-400/20';
+      case 'active': return 'text-green-500 bg-green-500/10 border-green-500/20';
+      case 'inactive': return 'text-yellow-500 bg-yellow-500/10 border-yellow-500/20';
+      case 'suspended': return 'text-red-500 bg-red-500/10 border-red-500/20';
+      case 'paused': return 'text-gray-400 bg-gray-400/10 border-gray-400/20';
       default: return 'text-gray-500 bg-gray-500/10 border-gray-500/20';
     }
   };
 
   const getPlanColor = (plan: string) => {
-    if (!plan) return 'text-gray-400 border-gray-400/30 bg-gray-400/5';
-    const p = plan.toLowerCase();
-    if (p.includes('premium')) return 'text-purple-500 border-purple-500/30 bg-purple-500/5';
-    if (p.includes('standard')) return 'text-blue-500 border-blue-500/30 bg-blue-500/5';
-    return 'text-gray-400 border-gray-400/30 bg-gray-400/5';
+    switch (plan) {
+      case 'premium': return 'text-purple-500 border-purple-500/30 bg-purple-500/5';
+      case 'vip': return 'text-yellow-500 border-yellow-500/30 bg-yellow-500/5';
+      case 'enterprise': return 'text-orange-500 border-orange-500/30 bg-orange-500/5';
+      case 'starter': return 'text-blue-500 border-blue-500/30 bg-blue-500/5';
+      default: return 'text-gray-400 border-gray-400/30 bg-gray-400/5';
+    }
   };
 
   const onUpdateSubmit = async (formData: MemberUpdateInput) => {
@@ -264,9 +269,9 @@ export default function MembersListPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
            {[
              { label: 'Total Members', value: total, icon: Users, color: 'text-[#dc2626]' },
-             { label: 'Active Now', value: members.filter((m:any) => m.status === 'Active').length, icon: Clock, color: 'text-green-500' },
-             { label: 'Premium Plans', value: members.filter((m:any) => (m.membershipPlan || '').includes('Premium')).length, icon: Shield, color: 'text-purple-500' },
-             { label: 'Pending KYC', value: members.filter((m:any) => m.verificationStatus === 'AWAITING KYC').length, icon: Filter, color: 'text-amber-500' }
+             { label: 'Active Now', value: members.filter((m:any) => m.status === 'active').length, icon: Clock, color: 'text-green-500' },
+             { label: 'Premium Plans', value: members.filter((m:any) => ['premium', 'vip', 'enterprise'].includes(m.membershipPlan)).length, icon: Shield, color: 'text-purple-500' },
+             { label: 'Pending KYC', value: members.filter((m:any) => m.verificationStatus === 'awaiting_kyc').length, icon: Filter, color: 'text-amber-500' }
            ].map((stat, i) => (
              <div key={i} className="bg-[#181818] border border-[#2a2a2a] p-4 rounded-xl flex items-center gap-4">
                <div className={cn("p-2.5 rounded-lg bg-[#1a1a1a] border border-[#333]", stat.color)}>
@@ -344,7 +349,7 @@ export default function MembersListPage() {
                           </div>
                           <div>
                             <p className="text-[13.5px] font-bold text-[#f0f0f0] group-hover:text-[#dc2626] transition-colors">
-                              {member.firstName} {member.secondName}
+                              {member.firstName} {member.lastName}
                             </p>
                             <div className="flex items-center gap-2 mt-0.5">
                                <Mail size={10} className="text-[#444]" />
@@ -361,10 +366,10 @@ export default function MembersListPage() {
                       <td className="px-6 py-4 text-center">
                         <div className={cn(
                           "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider font-rajdhani",
-                          getStatusColor(member.status || 'Active')
+                          getStatusColor(member.status || 'active')
                         )}>
-                          {member.status === 'Active' ? <CheckCircle2 size={10} /> : <Clock size={10} />}
-                          {member.status || 'Active'}
+                          {member.status === 'active' ? <CheckCircle2 size={10} /> : <Clock size={10} />}
+                          {formatLabel(member.status || 'active')}
                         </div>
                       </td>
                       <td className="px-6 py-4">
@@ -372,7 +377,7 @@ export default function MembersListPage() {
                           "inline-flex items-center gap-1.5 px-3 py-1 rounded border text-[11px] font-bold font-rajdhani tracking-wider uppercase",
                           getPlanColor(member.membershipPlan || '')
                         )}>
-                          {member.membershipPlan || 'Standard'}
+                          {formatLabel(member.membershipPlan || 'free')}
                         </div>
                       </td>
                       <td className="px-6 py-4 text-right">
@@ -490,7 +495,7 @@ export default function MembersListPage() {
                   </div>
                   <div>
                     <h2 className="text-3xl font-bold text-white tracking-tight leading-none mb-3">
-                      {viewingMember.firstName} {viewingMember.secondName}
+                      {viewingMember.firstName} {viewingMember.lastName}
                     </h2>
                     <div className="flex flex-wrap gap-3">
                       <span className="font-rajdhani font-bold text-[12px] tracking-[1.5px] text-[#a0a0a0] bg-[#0a0a0a] px-3 py-1 rounded border border-[#333] uppercase">
@@ -500,13 +505,13 @@ export default function MembersListPage() {
                         "inline-flex items-center gap-2 px-3 py-1 rounded-full border text-[11px] font-bold uppercase tracking-wider font-rajdhani",
                         getStatusColor(viewingMember.status)
                       )}>
-                        {viewingMember.status}
+                        {formatLabel(viewingMember.status || '')}
                       </div>
                       <div className={cn(
                         "inline-flex items-center px-3 py-1 rounded border text-[11px] font-bold font-rajdhani tracking-wider uppercase",
                         getPlanColor(viewingMember.membershipPlan)
                       )}>
-                        {viewingMember.membershipPlan || 'Standard'}
+                        {formatLabel(viewingMember.membershipPlan || 'free')}
                       </div>
                     </div>
                   </div>
@@ -575,8 +580,8 @@ export default function MembersListPage() {
                       <Shield size={16} /> System Control
                     </h4>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-5 bg-[#0a0a0a]/30 p-5 rounded-xl border border-[#1f1f1f]">
-                       <InfoItem label="Verification" value={viewingMember.verificationStatus} />
-                       <InfoItem label="Account Manager" value={viewingMember.accountManager?.name || 'Unassigned'} />
+                       <InfoItem label="Verification" value={formatLabel(viewingMember.verificationStatus || '')} />
+                       <InfoItem label="Account Manager" value={viewingMember.accountManager?.fullName || 'Unassigned'} />
                        <InfoItem label="Active Task" value={viewingMember.task || 'None'} />
                     </div>
                 </section>
@@ -626,7 +631,7 @@ export default function MembersListPage() {
                     </div>
                     <div>
                       <label className="block text-[11px] font-bold text-[#606060] uppercase tracking-widest mb-2 font-rajdhani">Second Name</label>
-                      <input {...register("secondName")} className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg h-11 px-4 text-white outline-none focus:border-[#dc2626] transition-all text-sm" />
+                      <input {...register("lastName")} className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg h-11 px-4 text-white outline-none focus:border-[#dc2626] transition-all text-sm" />
                     </div>
                     <div>
                       <label className="block text-[11px] font-bold text-[#606060] uppercase tracking-widest mb-2 font-rajdhani">Email Link</label>
@@ -719,34 +724,36 @@ export default function MembersListPage() {
                     <div>
                       <label className="block text-[11px] font-bold text-[#606060] uppercase tracking-widest mb-2 font-rajdhani">System Status</label>
                       <select {...register("status")} className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg h-11 px-4 text-white outline-none focus:border-[#dc2626] transition-all text-sm appearance-none">
-                        <option value="Active">Active</option>
-                        <option value="Inactive">Inactive</option>
-                        <option value="Suspended">Suspended</option>
-                        <option value="Pending">Pending</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                        <option value="suspended">Suspended</option>
+                        <option value="paused">Paused</option>
                       </select>
                     </div>
                     <div>
                       <label className="block text-[11px] font-bold text-[#606060] uppercase tracking-widest mb-2 font-rajdhani">Account Manager</label>
                       <select {...register("accountManagerId")} className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg h-11 px-4 text-white outline-none focus:border-[#dc2626] transition-all text-sm appearance-none">
                         <option value="">Unassigned</option>
-                        {managers?.map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        {managers?.map((m: any) => <option key={m.id} value={m.id}>{m.fullName}</option>)}
                       </select>
                     </div>
                     <div>
                       <label className="block text-[11px] font-bold text-[#606060] uppercase tracking-widest mb-2 font-rajdhani">Verification Level</label>
                       <select {...register("verificationStatus")} className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg h-11 px-4 text-white outline-none focus:border-[#dc2626] transition-all text-sm appearance-none">
-                        <option value="AWAITING KYC">Awaiting KYC</option>
-                        <option value="VERIFIED">Verified</option>
-                        <option value="REJECTED">Rejected</option>
+                        <option value="awaiting_kyc">Awaiting KYC</option>
+                        <option value="under_review">Under Review</option>
+                        <option value="verified">Verified</option>
+                        <option value="rejected">Rejected</option>
                       </select>
                     </div>
                     <div>
                       <label className="block text-[11px] font-bold text-[#606060] uppercase tracking-widest mb-2 font-rajdhani">Membership Tier</label>
                       <select {...register("membershipPlan")} className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg h-11 px-4 text-white outline-none focus:border-[#dc2626] transition-all text-sm appearance-none">
-                        <option value="Standard (Monthly)">Standard (Monthly)</option>
-                        <option value="Standard (Annual)">Standard (Annual)</option>
-                        <option value="Premium (Monthly)">Premium (Monthly)</option>
-                        <option value="Premium (Annual)">Premium (Annual)</option>
+                        <option value="free">Free</option>
+                        <option value="starter">Starter</option>
+                        <option value="premium">Premium</option>
+                        <option value="vip">VIP</option>
+                        <option value="enterprise">Enterprise</option>
                       </select>
                     </div>
                   </div>

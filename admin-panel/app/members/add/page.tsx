@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "react-hot-toast";
 import { useGetPresignedUrl } from "@/lib/hooks/useAdmin";
 import { useCreateMember, useGetManagers } from "@/lib/hooks/useMembers";
+import { AccountManagerSelect } from "@/components/members/AccountManagerSelect";
 import { useClerk } from "@clerk/nextjs";
 
 const MARKETING_CHANNELS = ["SEO", "Paid Ads", "Social Media", "Email", "Referral", "Offline"];
@@ -26,11 +27,11 @@ const MARKETING_CHANNELS = ["SEO", "Paid Ads", "Social Media", "Email", "Referra
 const memberSchema = z.object({
   memberId: z.string(),
   firstName: z.string().min(1, "First Name is required"),
-  secondName: z.string().optional(),
+  lastName: z.string().optional(),
   dob: z.string().optional(),
   gender: z.string().optional(),
   email: z.string().email("Valid email is required"),
-  phone: z.string().length(10, "Must be 10 digits").optional().or(z.literal("")),
+  phone: z.string().min(10, "Must be 10 digits").max(10, "Must be 10 digits"),
   city: z.string().optional(),
   state: z.string().optional(),
   pincode: z.string().length(6, "Must be 6 digits").optional().or(z.literal("")),
@@ -49,18 +50,15 @@ const memberSchema = z.object({
   challenge1: z.string().optional(),
   challenge2: z.string().optional(),
   challenge3: z.string().optional(),
-  hasSocialMediaManager: z.boolean().default(false),
-  socialMediaManagerNote: z.string().optional(),
+  hasMarketingTeam: z.boolean().default(false),
+  marketingTeamDetails: z.string().optional(),
   hasVideoEditing: z.boolean().default(false),
-  videoEditingNote: z.string().optional(),
+  videoEditingDetails: z.string().optional(),
   notes: z.string().optional(),
-  membershipPlan: z.string().default("Standard (Annual)"),
-  status: z.string().default("Active"),
-  verificationStatus: z.string().default("AWAITING KYC"),
+  membershipPlan: z.string().default("free"),
+  status: z.string().default("active"),
+  verificationStatus: z.string().default("awaiting_kyc"),
   accountManagerId: z.string().optional(),
-  task: z.string().optional(),
-  assignedById: z.string().optional(),
-  assignedAt: z.string().optional(),
 });
 
 type MemberInput = z.infer<typeof memberSchema>;
@@ -93,19 +91,20 @@ export default function AddMemberPage() {
     resolver: zodResolver(memberSchema),
     defaultValues: {
       memberId: `TBT-${Math.floor(1000 + Math.random() * 9000)}`,
-      status: "Active",
-      verificationStatus: "AWAITING KYC",
-      membershipPlan: "Standard (Annual)",
+      status: "active",
+      verificationStatus: "awaiting_kyc",
+      membershipPlan: "free",
       marketingChannels: [],
-      hasSocialMediaManager: false,
+      hasMarketingTeam: false,
       hasVideoEditing: false,
     }
   });
 
   const watchChannels = watch("marketingChannels") || [];
-  const watchHasSMM = watch("hasSocialMediaManager");
+  const watchHasSMM = watch("hasMarketingTeam");
   const watchHasVideo = watch("hasVideoEditing");
   const watchMemberId = watch("memberId");
+  const watchAccountManagerId = watch("accountManagerId");
 
   const toggleChannel = (channel: string) => {
     if (watchChannels.includes(channel)) {
@@ -160,11 +159,12 @@ export default function AddMemberPage() {
         kycDocumentUrl = publicUrl;
       }
 
+      const { challenge1, challenge2, challenge3, ...rest } = data;
       const payload = {
-        ...data,
+        ...rest,
         profilePhotoUrl,
         kycDocumentUrl,
-        assignedAt: new Date().toISOString()
+        currentChallenges: [challenge1, challenge2, challenge3].filter(Boolean),
       };
 
       await createMember.mutateAsync(payload);
@@ -235,8 +235,8 @@ export default function AddMemberPage() {
                   {errors.firstName && <p className="text-[12px] text-red-500 mt-1">{errors.firstName.message}</p>}
                 </div>
                 <div>
-                  <label className="block text-[11px] font-[600] text-[#888] tracking-[0.05em] uppercase mb-2">Second Name</label>
-                  <input {...register("secondName")} className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-[8px] h-[44px] px-4 text-white placeholder-[#555] text-[14px] outline-none focus:border-[#dc2626]" />
+                  <label className="block text-[11px] font-[600] text-[#888] tracking-[0.05em] uppercase mb-2">Last Name</label>
+                  <input {...register("lastName")} className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-[8px] h-[44px] px-4 text-white placeholder-[#555] text-[14px] outline-none focus:border-[#dc2626]" />
                 </div>
               </div>
 
@@ -250,10 +250,10 @@ export default function AddMemberPage() {
                   <label className="block text-[11px] font-[600] text-[#888] tracking-[0.05em] uppercase mb-2">Gender</label>
                   <select {...register("gender")} className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-[8px] h-[44px] px-4 text-white placeholder-[#555] text-[14px] outline-none focus:border-[#dc2626] appearance-none cursor-pointer">
                     <option value="" disabled>Select...</option>
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                    <option value="Other">Other</option>
-                    <option value="Prefer not to say">Prefer not to say</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="other">Other</option>
+                    <option value="prefer_not_to_say">Prefer not to say</option>
                   </select>
                 </div>
               </div>
@@ -266,7 +266,7 @@ export default function AddMemberPage() {
                   {errors.email && <p className="text-[12px] text-red-500 mt-1">{errors.email.message}</p>}
                 </div>
                 <div>
-                  <label className="block text-[11px] font-[600] text-[#888] tracking-[0.05em] uppercase mb-2">Phone</label>
+                  <label className="block text-[11px] font-[600] text-[#888] tracking-[0.05em] uppercase mb-2">Phone <span className="text-[#dc2626]">*</span></label>
                   <div className="flex items-center bg-[#1a1a1a] border border-[#2a2a2a] rounded-[8px] h-[44px] overflow-hidden focus-within:border-[#dc2626]">
                     <span className="px-4 text-[#888] font-bold text-[14px] border-r border-[#2a2a2a]">+91</span>
                     <input {...register("phone")} className="w-full h-full bg-transparent px-4 text-white placeholder-[#555] text-[14px] outline-none" />
@@ -361,9 +361,9 @@ export default function AddMemberPage() {
                   <label className="block text-[11px] font-[600] text-[#888] tracking-[0.05em] uppercase mb-2">Preferred Session Mode</label>
                   <select {...register("preferredSessionMode")} className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-[8px] h-[44px] px-4 text-white placeholder-[#555] text-[14px] outline-none focus:border-[#dc2626] appearance-none cursor-pointer">
                     <option value="" disabled>Select...</option>
-                    <option value="Online">Online</option>
-                    <option value="Offline">Offline</option>
-                    <option value="Hybrid">Hybrid</option>
+                    <option value="online">Online</option>
+                    <option value="offline">Offline</option>
+                    <option value="hybrid">Hybrid</option>
                   </select>
                 </div>
                 <div>
@@ -442,15 +442,15 @@ export default function AddMemberPage() {
                       <h4 className="text-[15px] text-white font-bold">Social Media Manager</h4>
                       <p className="text-[12px] text-[#888] mt-1">Existing support available?</p>
                     </div>
-                    <button 
-                      type="button" 
-                      onClick={() => setValue("hasSocialMediaManager", !watchHasSMM, { shouldDirty: true })}
+                    <button
+                      type="button"
+                      onClick={() => setValue("hasMarketingTeam", !watchHasSMM, { shouldDirty: true })}
                       className={cn("w-[44px] h-[24px] rounded-full relative transition-colors duration-300", watchHasSMM ? "bg-[#dc2626]" : "bg-[#444]")}
                     >
                       <div className={cn("w-[18px] h-[18px] bg-white rounded-full absolute top-[3px] transition-all duration-300", watchHasSMM ? "right-[3px]" : "left-[3px]")} />
                     </button>
                   </div>
-                  <input {...register("socialMediaManagerNote")} placeholder="..." className="w-full bg-[#141414] border border-[#2a2a2a] rounded-[6px] h-[38px] px-3 text-white placeholder-[#555] text-[13px] outline-none focus:border-[#dc2626]" />
+                  <input {...register("marketingTeamDetails")} placeholder="..." className="w-full bg-[#141414] border border-[#2a2a2a] rounded-[6px] h-[38px] px-3 text-white placeholder-[#555] text-[13px] outline-none focus:border-[#dc2626]" />
                 </div>
 
                 <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-[12px] p-6">
@@ -467,7 +467,7 @@ export default function AddMemberPage() {
                       <div className={cn("w-[18px] h-[18px] bg-white rounded-full absolute top-[3px] transition-all duration-300", watchHasVideo ? "right-[3px]" : "left-[3px]")} />
                     </button>
                   </div>
-                  <input {...register("videoEditingNote")} placeholder="..." className="w-full bg-[#141414] border border-[#2a2a2a] rounded-[6px] h-[38px] px-3 text-white placeholder-[#555] text-[13px] outline-none focus:border-[#dc2626]" />
+                  <input {...register("videoEditingDetails")} placeholder="..." className="w-full bg-[#141414] border border-[#2a2a2a] rounded-[6px] h-[38px] px-3 text-white placeholder-[#555] text-[13px] outline-none focus:border-[#dc2626]" />
                 </div>
               </div>
 
@@ -495,11 +495,11 @@ export default function AddMemberPage() {
                   <label className="block text-[11px] font-[600] text-[#888] tracking-[0.05em] uppercase mb-2">Membership Plan</label>
                   <select {...register("membershipPlan")} className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-[8px] h-[44px] px-4 text-white placeholder-[#555] text-[14px] outline-none focus:border-[#dc2626] appearance-none cursor-pointer">
                     <option value="" disabled>Select...</option>
-                    <option value="Standard (Monthly)">Standard (Monthly)</option>
-                    <option value="Standard (Annual)">Standard (Annual)</option>
-                    <option value="Premium (Monthly)">Premium (Monthly)</option>
-                    <option value="Premium (Annual)">Premium (Annual)</option>
-                    <option value="Trial">Trial</option>
+                    <option value="free">Free</option>
+                    <option value="starter">Starter</option>
+                    <option value="premium">Premium</option>
+                    <option value="vip">VIP</option>
+                    <option value="enterprise">Enterprise</option>
                   </select>
                 </div>
               </div>
@@ -509,10 +509,10 @@ export default function AddMemberPage() {
                   <label className="block text-[11px] font-[600] text-[#888] tracking-[0.05em] uppercase mb-2">Status</label>
                   <select {...register("status")} className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-[8px] h-[44px] px-4 text-green-500 font-medium placeholder-[#555] text-[14px] outline-none focus:border-[#dc2626] appearance-none cursor-pointer">
                     <option value="" disabled className="text-white">Select...</option>
-                    <option value="Active" className="text-green-500">Active</option>
-                    <option value="Inactive" className="text-yellow-500">Inactive</option>
-                    <option value="Suspended" className="text-red-500">Suspended</option>
-                    <option value="Pending" className="text-gray-400">Pending</option>
+                    <option value="active" className="text-green-500">Active</option>
+                    <option value="inactive" className="text-yellow-500">Inactive</option>
+                    <option value="paused" className="text-blue-400">Paused</option>
+                    <option value="suspended" className="text-red-500">Suspended</option>
                   </select>
                 </div>
                 <div>
@@ -527,10 +527,12 @@ export default function AddMemberPage() {
               <div className="grid grid-cols-2 gap-6">
                 <div>
                   <label className="block text-[11px] font-[600] text-[#888] tracking-[0.05em] uppercase mb-2">Assign Account Manager</label>
-                  <select {...register("accountManagerId")} className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-[8px] h-[44px] px-4 text-white placeholder-[#555] text-[14px] outline-none focus:border-[#dc2626] appearance-none cursor-pointer">
-                    <option value="" disabled>Select...</option>
-                    {managers?.map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                  </select>
+                  <AccountManagerSelect
+                    managers={Array.isArray(managers) ? managers : []}
+                    isLoading={isLoadingManagers}
+                    value={watchAccountManagerId || ""}
+                    onChange={(id) => setValue("accountManagerId", id, { shouldDirty: true })}
+                  />
                 </div>
                 <div>
                   <label className="block text-[11px] font-[600] text-[#888] tracking-[0.05em] uppercase mb-2">Task</label>
@@ -549,7 +551,7 @@ export default function AddMemberPage() {
                   <label className="block text-[11px] font-[600] text-[#888] tracking-[0.05em] uppercase mb-2">Assigned By</label>
                   <select {...register("assignedById")} className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-[8px] h-[44px] px-4 text-white placeholder-[#555] text-[14px] outline-none focus:border-[#dc2626] appearance-none cursor-pointer">
                     <option value="" disabled>Select...</option>
-                    {managers?.map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                    {managers?.map((m: any) => <option key={m.id} value={m.id}>{m.fullName}</option>)}
                   </select>
                 </div>
                 <div>

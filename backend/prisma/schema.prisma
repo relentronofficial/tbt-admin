@@ -8,261 +8,1230 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+// --- ENUMS ---
+
+enum Role {
+  super_admin
+  admin
+  account_manager
+  mentor
+  moderator
+}
+
+enum AdminStatus {
+  active
+  inactive
+  suspended
+  pending_approval
+}
+
+enum MemberStatus {
+  active
+  inactive
+  paused
+  suspended
+}
+
+enum VerificationStatus {
+  awaiting_kyc
+  under_review
+  verified
+  rejected
+}
+
+enum CourseLevel {
+  beginner
+  intermediate
+  advanced
+}
+
+enum AccessType {
+  free
+  subscription
+  premium
+}
+
+enum CourseStatus {
+  draft
+  published
+  archived
+}
+
+enum ContentType {
+  video
+  audio
+  pdf
+  ebook
+  text
+}
+
+enum Priority {
+  low
+  medium
+  high
+  critical
+}
+
+enum SubmissionStatus {
+  pending
+  approved
+  rejected
+  resubmission_required
+}
+
+enum PostType {
+  post
+  announcement
+  poll
+}
+
+enum WebinarStatus {
+  scheduled
+  live
+  ended
+}
+
+enum NotificationType {
+  system
+  course
+  task
+  community
+  webinar
+}
+
+enum TicketStatus {
+  open
+  in_progress
+  escalated
+  resolved
+  closed
+}
+
+enum SenderType {
+  member
+  admin
+}
+
+enum Gender {
+  male
+  female
+  other
+  prefer_not_to_say
+}
+
+enum SessionMode {
+  online
+  offline
+  hybrid
+}
+
+enum BusinessStage {
+  idea
+  startup
+  growth
+  scaling
+}
+
+enum MembershipPlan {
+  free
+  starter
+  premium
+  vip
+  enterprise
+}
+
+enum ChurnRisk {
+  low
+  medium
+  high
+}
+
+// --- MODELS ---
+
+model AdminIdSequence {
+  id Int @id @default(autoincrement())
+}
+
 model Admin {
-  id                 String        @id @default(uuid())
-  adminId            String        @unique
-  fullName           String
-  email              String        @unique
-  contactNumber      String
-  alternateContact   String?
-  dateOfBirth        DateTime?
-  bloodGroup         String?
-  profilePhoto       String?
-  role               Role          @default(Viewer)
+  id                 String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clerkId            String      @unique @map("clerk_id")
+  fullName           String      @map("full_name")
+  email              String      @unique
+  phone              String?
+  alternatePhone     String?     @map("alternate_phone")
+  dob                DateTime?   @db.Date
+  bloodGroup         String?     @map("blood_group")
+  profilePhotoUrl    String?     @map("profile_photo_url")
+  role               Role
   department         String?
   designation        String?
-  employeeId         String?       @unique
-  country            String        @default("India")
-  state              String        @default("Tamil Nadu")
-  city               String        @default("Chennai")
+  reportingManagerId String?     @map("reporting_manager_id") @db.Uuid
+  employeeId         String?     @unique @map("employee_id")
+  country            String?     @default("India")
+  state              String?
+  city               String?
   address            String?
-  username           String        @unique
-  accountStatus      AccountStatus @default(Active)
-  twoFactorEnabled   Boolean       @default(false)
+  status             AdminStatus @default(active)
+  username           String?     @unique
   notes              String?
   tags               String[]
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
-  lastLogin          DateTime?
-  reportingManagerId String?
-  reportingManager   Admin?        @relation("ManagerToAdmin", fields: [reportingManagerId], references: [id])
-  subordinates       Admin[]       @relation("ManagerToAdmin")
-  rbac               RBAC[]
-  assignedTasks      Task[]        @relation("AssignedTo")
-  createdTasks       Task[]        @relation("AssignedBy")
-  hostedWebinars     Webinar[]     @relation("WebinarHost")
-}
+  permissions        Json?
+  lastLoginAt        DateTime?   @map("last_login_at") @db.Timestamptz(6)
 
-model Course {
-  id            String       @id @default(uuid())
-  courseId      String       @unique
-  title         String
-  description   String?
-  category      String?
-  curriculum    Json?
-  totalDuration Int?
-  totalLessons  Int?
-  instructor    String?
-  status        CourseStatus @default(Draft)
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-}
+  createdBy String?   @map("created_by") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-model Post {
-  id        String   @id @default(uuid())
-  postId    String   @unique
-  content   String
-  mediaUrls String[]
-  type      PostType @default(Post)
-  isPinned  Boolean  @default(false)
-  authorId  String?  @db.Uuid
-  author    Member?  @relation(fields: [authorId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
+  // Relations
+  reportingManager Admin?  @relation("ManagerToAdmin", fields: [reportingManagerId], references: [id])
+  subordinates     Admin[] @relation("ManagerToAdmin")
 
-model Webinar {
-  id             String        @id @default(uuid())
-  webinarId      String        @unique
-  title          String
-  description    String?
-  hostId         String?
-  host           Admin?        @relation("WebinarHost", fields: [hostId], references: [id])
-  scheduledAt    DateTime
-  duration       Int?
-  status         WebinarStatus @default(Scheduled)
-  agoraChannelId String?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-}
+  assignedMembers Member[] @relation("AccountManager")
+  createdMembers  Member[] @relation("MemberCreator")
 
-model Notification {
-  id        String           @id @default(uuid())
-  userId    String
-  title     String
-  body      String
-  type      NotificationType @default(System)
-  isRead    Boolean          @default(false)
-  metadata  Json?
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
-}
+  courses         Course[]         @relation("CourseCreator")
+  reviewedTasks   TaskSubmission[] @relation("TaskReviewer")
+  hostedWebinars  Webinar[]        @relation("WebinarHost")
+  assignedTickets SupportTicket[]  @relation("TicketAssignee")
+  auditLogs       AuditLog[]
+  resources       Resource[]
+  updatedSettings Setting[]        @relation("SettingUpdater")
 
-model Task {
-  id           String     @id @default(uuid())
-  taskId       String     @unique
-  title        String
-  description  String?
-  priority     Priority   @default(Medium)
-  status       TaskStatus @default(Todo)
-  dueDate      DateTime?
-  completedAt  DateTime?
-  assignedToId String?
-  assignedTo   Admin?     @relation("AssignedTo", fields: [assignedToId], references: [id])
-  assignedById String?
-  assignedBy   Admin?     @relation("AssignedBy", fields: [assignedById], references: [id])
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-
-  @@map("tasks")
-}
-
-model adminIdSequence {
-  id        Int      @id @default(autoincrement())
-  createdAt DateTime @default(now())
-}
-
-model RBAC {
-  id        String  @id @default(uuid())
-  adminId   String
-  module    String
-  canView   Boolean @default(false)
-  canCreate Boolean @default(false)
-  canEdit   Boolean @default(false)
-  canDelete Boolean @default(false)
-  admin     Admin   @relation(fields: [adminId], references: [id], onDelete: Cascade)
-
-  @@unique([adminId, module])
-}
-
-model wrappers_fdw_stats {
-  fdw_name     String   @id
-  create_times BigInt?
-  rows_in      BigInt?
-  rows_out     BigInt?
-  bytes_in     BigInt?
-  bytes_out    BigInt?
-  metadata     Json?
-  created_at   DateTime @default(dbgenerated("timezone('utc'::text, now())")) @db.Timestamptz(6)
-  updated_at   DateTime @default(dbgenerated("timezone('utc'::text, now())")) @db.Timestamptz(6)
-}
-
-model Manager {
-  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name            String
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  assignedMembers Member[] @relation("ManagerAssigned")
-  createdMembers  Member[] @relation("ManagerCreator")
-
-  @@map("managers")
+  @@map("admins")
 }
 
 model Member {
-  id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  memberId               String    @unique @map("member_id")
-  profilePhotoUrl        String?   @map("profile_photo_url")
-  firstName              String    @map("first_name")
-  secondName             String?   @map("second_name")
-  dob                    DateTime? @db.Date
-  gender                 String?
-  email                  String    @unique
-  phone                  String?
-  city                   String?
-  state                  String?
-  pincode                String?
-  businessName           String?   @map("business_name")
-  businessEstablishedOn  DateTime? @map("business_established_on") @db.Date
-  productServiceType     String?   @map("product_service_type")
-  instagramLink          String?   @map("instagram_link")
-  annualTurnover         String?   @map("annual_turnover")
-  goalAfter90Days        String?   @map("goal_after_90_days")
-  preferredSessionMode   String?   @map("preferred_session_mode")
-  gstNumber              String?   @map("gst_number")
-  marketingChannels      String[]  @map("marketing_channels")
-  marketingChannelName   String?   @map("marketing_channel_name")
-  domainHostingDetails   String?   @map("domain_hosting_details")
-  businessAddress        String?   @map("business_address")
-  challenge1             String?   @map("challenge_1")
-  challenge2             String?   @map("challenge_2")
-  challenge3             String?   @map("challenge_3")
-  hasSocialMediaManager  Boolean   @default(false) @map("has_social_media_manager")
-  socialMediaManagerNote String?   @map("social_media_manager_note")
-  hasVideoEditing        Boolean   @default(false) @map("has_video_editing")
-  videoEditingNote       String?   @map("video_editing_note")
-  notes                  String?
-  membershipPlan         String    @default("Standard (Annual)") @map("membership_plan")
-  status                 String    @default("Active")
-  verificationStatus     String    @default("AWAITING KYC") @map("verification_status")
-  accountManagerId       String?   @map("account_manager_id") @db.Uuid
-  task                   String?
-  assignedById           String?   @map("assigned_by_id") @db.Uuid
-  assignedAt             DateTime? @map("assigned_at") @db.Timestamptz(6)
-  kycDocumentUrl         String?   @map("kyc_document_url")
-  enrolledCourses        String[]  @default([])
-  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt              DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  accountManager         Manager?  @relation("ManagerAssigned", fields: [accountManagerId], references: [id])
-  assignedBy             Manager?  @relation("ManagerCreator", fields: [assignedById], references: [id])
-  posts                  Post[]
+  id                    String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId              String             @unique @map("member_id")
+  firstName             String             @map("first_name")
+  lastName              String?            @map("last_name")
+  email                 String             @unique
+  phone                 String             @unique
+  alternatePhone        String?            @map("alternate_phone")
+  dob                   DateTime?          @db.Date
+  gender                Gender?
+  profilePhotoUrl       String?            @map("profile_photo_url")
+  city                  String?
+  state                 String?
+  pincode               String?
+  businessName          String?            @map("business_name")
+  businessEstablishedOn DateTime?          @map("business_established_on") @db.Date
+  productServiceType    String?            @map("product_service_type")
+  instagramLink         String?            @map("instagram_link")
+  annualTurnover        String?            @map("annual_turnover")
+  goalAfter90Days       String?            @map("goal_after_90_days")
+  preferredSessionMode  SessionMode?       @map("preferred_session_mode")
+  gstNumber             String?            @map("gst_number")
+  marketingChannels     String[]           @map("marketing_channels")
+  marketingChannelName  String?            @map("marketing_channel_name")
+  hasMarketingTeam      Boolean            @default(false) @map("has_marketing_team")
+  marketingTeamDetails  String?            @map("marketing_team_details")
+  hasVideoEditing       Boolean            @default(false) @map("has_video_editing")
+  videoEditingDetails   String?            @map("video_editing_details")
+  domainHostingDetails  String?            @map("domain_hosting_details")
+  businessAddress       String?            @map("business_address")
+  sector                String?
+  industry              String?
+  subIndustry           String?            @map("sub_industry")
+  businessStage         BusinessStage?     @map("business_stage")
+  currentChallenges     String[]           @map("current_challenges")
+  notes                 String?
+  membershipPlan        MembershipPlan     @default(free) @map("membership_plan")
+  status                MemberStatus       @default(active)
+  verificationStatus    VerificationStatus @default(awaiting_kyc) @map("verification_status")
+  accountManagerId      String?            @map("account_manager_id") @db.Uuid
+  batchId               String?            @map("batch_id") @db.Uuid
+  pushToken             String?            @map("push_token")
+  healthScore           Int                @default(0) @map("health_score")
+  churnRisk             ChurnRisk          @default(low) @map("churn_risk")
+  totalPoints           Int                @default(0) @map("total_points")
+  currentStreak         Int                @default(0) @map("current_streak")
+  longestStreak         Int                @default(0) @map("longest_streak")
+  lastActiveAt          DateTime?          @map("last_active_at") @db.Timestamptz(6)
+  onboardingCompleted   Boolean            @default(false) @map("onboarding_completed")
+
+  createdBy String?   @map("created_by") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  accountManager Admin? @relation("AccountManager", fields: [accountManagerId], references: [id])
+  creator        Admin? @relation("MemberCreator", fields: [createdBy], references: [id])
+  batch          Batch? @relation(fields: [batchId], references: [id])
+
+  courseEnrollments    CourseEnrollment[]
+  quizAttempts         QuizAttempt[]
+  lessonProgress       LessonProgress[]
+  programEnrollments   ProgramEnrollment[]
+  taskSubmissions      TaskSubmission[]
+  podcastProgress      PodcastProgress[]
+  webinarRegistrations WebinarRegistration[]
+  eventRegistrations   EventRegistration[]
+  posts                Post[]
+  comments             Comment[]
+  likes                Like[]
+  supportTickets       SupportTicket[]
+  rewardRedemptions    RewardRedemption[]
+  badges               MemberBadge[]
+  milestones           MemberMilestone[]
+  streaks              Streak[]
+  pointsLedger         PointsLedger[]
+  subscriptions        Subscription[]
+  payments             Payment[]
+  kycDocuments         KycDocument[]
+  activityLogs         ActivityLog[]
+  sessions             MemberSession[]
+  whatsappMessages     WhatsappMessage[]
+  assessments          Assessment[]
+  checklistCompletions ChecklistCompletion[]
+  pollVotes            PollVote[]
+  leaderboardEntries   Leaderboard[]
+  Notification         Notification[]
 
   @@map("members")
 }
 
-enum Role {
-  SuperAdmin
-  Manager
-  Moderator
-  Viewer
+model Course {
+  id            String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title         String
+  slug          String       @unique
+  description   String?
+  thumbnailUrl  String?      @map("thumbnail_url")
+  trailerUrl    String?      @map("trailer_url")
+  categoryId    String?      @map("category_id") @db.Uuid
+  level         CourseLevel  @default(beginner)
+  accessType    AccessType   @default(free) @map("access_type")
+  price         Decimal?     @db.Decimal(10, 2)
+  durationHours Decimal?     @map("duration_hours") @db.Decimal(5, 1)
+  totalModules  Int          @default(0) @map("total_modules")
+  totalLessons  Int          @default(0) @map("total_lessons")
+  sortOrder     Int          @default(0) @map("sort_order")
+  isPublished   Boolean      @default(false) @map("is_published")
+  isFeatured    Boolean      @default(false) @map("is_featured")
+  status        CourseStatus @default(draft)
+
+  createdBy String?   @map("created_by") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // Relations
+  category    Category?          @relation(fields: [categoryId], references: [id])
+  creator     Admin?             @relation("CourseCreator", fields: [createdBy], references: [id])
+  modules     Module[]
+  enrollments CourseEnrollment[]
+
+  @@map("courses")
 }
 
-enum AccountStatus {
-  Active
-  Inactive
-  Suspended
+model Module {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  courseId      String   @map("course_id") @db.Uuid
+  title         String
+  description   String?
+  introVideoUrl String?  @map("intro_video_url")
+  sortOrder     Int      @default(0) @map("sort_order")
+  isPublished   Boolean  @default(false) @map("is_published")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  course  Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons Lesson[]
+
+  @@map("modules")
 }
 
-enum MembershipStatus {
-  Active
-  Inactive
-  Expired
+model Lesson {
+  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  moduleId        String      @map("module_id") @db.Uuid
+  title           String
+  description     String?
+  contentType     ContentType @map("content_type")
+  contentUrl      String?     @map("content_url")
+  durationMinutes Int?        @map("duration_minutes")
+  sortOrder       Int         @default(0) @map("sort_order")
+  isLocked        Boolean     @default(true) @map("is_locked")
+  quizRequired    Boolean     @default(true) @map("quiz_required")
+  passPercentage  Int         @default(70) @map("pass_percentage")
+  isPublished     Boolean     @default(false) @map("is_published")
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  module   Module           @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  quiz     Quiz?
+  progress LessonProgress[]
+
+  @@map("lessons")
 }
 
-enum CourseStatus {
-  Draft
-  Published
-  Archived
+model Quiz {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lessonId       String   @unique @map("lesson_id") @db.Uuid
+  title          String
+  passPercentage Int      @default(70) @map("pass_percentage")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  lesson    Lesson         @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  questions QuizQuestion[]
+  attempts  QuizAttempt[]
+
+  @@map("quizzes")
 }
 
-enum Priority {
-  Low
-  Medium
-  High
-  Critical
+model QuizQuestion {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  quizId        String   @map("quiz_id") @db.Uuid
+  questionText  String   @map("question_text")
+  questionType  String   @map("question_type")
+  options       Json?
+  correctAnswer String   @map("correct_answer")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@map("quiz_questions")
 }
 
-enum TaskStatus {
-  Todo
-  InProgress
-  Review
-  Done
+model QuizAttempt {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId    String   @map("member_id") @db.Uuid
+  quizId      String   @map("quiz_id") @db.Uuid
+  score       Int
+  passed      Boolean
+  attemptedAt DateTime @default(now()) @map("attempted_at") @db.Timestamptz(6)
+
+  // Relations
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  quiz   Quiz   @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@map("quiz_attempts")
 }
 
-enum PostType {
-  Post
-  Announcement
-  Poll
+model LessonProgress {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId        String    @map("member_id") @db.Uuid
+  lessonId        String    @map("lesson_id") @db.Uuid
+  watchPercentage Int       @default(0) @map("watch_percentage")
+  completed       Boolean   @default(false)
+  completedAt     DateTime? @map("completed_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, lessonId])
+  @@map("lesson_progress")
 }
 
-enum WebinarStatus {
-  Scheduled
-  Live
-  Ended
+model CourseEnrollment {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId           String    @map("member_id") @db.Uuid
+  courseId           String    @map("course_id") @db.Uuid
+  enrolledAt         DateTime  @default(now()) @map("enrolled_at") @db.Timestamptz(6)
+  completedAt        DateTime? @map("completed_at") @db.Timestamptz(6)
+  progressPercentage Int       @default(0) @map("progress_percentage")
+
+  // Relations
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, courseId])
+  @@map("course_enrollments")
 }
 
-enum NotificationType {
-  System
-  Course
-  Task
-  Community
-  Webinar
+model Program {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name           String
+  description    String?
+  durationDays   Int      @map("duration_days")
+  incubationDays Int      @default(0) @map("incubation_days")
+  status         String   @default("active")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  enrollments ProgramEnrollment[]
+  steps       TaskStep[]
+  tasks       Task[]
+  batches     Batch[]
+  assessments Assessment[]
+  checklists  Checklist[]
+  Milestone   Milestone[]
+
+  @@map("programs")
+}
+
+model ProgramEnrollment {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId    String    @map("member_id") @db.Uuid
+  programId   String    @map("program_id") @db.Uuid
+  enrolledAt  DateTime  @default(now()) @map("enrolled_at") @db.Timestamptz(6)
+  startedAt   DateTime? @map("started_at") @db.Timestamptz(6)
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(6)
+  status      String    @default("active")
+
+  // Relations
+  member  Member  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, programId])
+  @@map("program_enrollments")
+}
+
+model TaskStep {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  programId  String   @map("program_id") @db.Uuid
+  stepNumber Int      @map("step_number")
+  stepName   String   @map("step_name")
+  sortOrder  Int      @default(0) @map("sort_order")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+  tasks   Task[]
+
+  @@map("task_steps")
+}
+
+model Task {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  programId        String   @map("program_id") @db.Uuid
+  stepId           String?  @map("step_id") @db.Uuid
+  dayNumber        Int      @map("day_number")
+  title            String
+  description      String?
+  deliverables     String?
+  contentUrl       String?  @map("content_url")
+  basePoints       Int      @default(100) @map("base_points")
+  proofType        String   @map("proof_type")
+  estimatedMinutes Int      @default(15) @map("estimated_minutes")
+  isMilestone      Boolean  @default(false) @map("is_milestone")
+  milestoneLabel   String?  @map("milestone_label")
+  bonusPoints      Int      @default(0) @map("bonus_points")
+  sortOrder        Int      @default(0) @map("sort_order")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  program     Program          @relation(fields: [programId], references: [id], onDelete: Cascade)
+  step        TaskStep?        @relation(fields: [stepId], references: [id])
+  submissions TaskSubmission[]
+
+  @@map("tasks")
+}
+
+model TaskSubmission {
+  id            String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId      String           @map("member_id") @db.Uuid
+  taskId        String           @map("task_id") @db.Uuid
+  responseValue String?          @map("response_value")
+  proofUrl      String?          @map("proof_url")
+  proofType     String?          @map("proof_type")
+  status        SubmissionStatus @default(pending)
+  reviewedBy    String?          @map("reviewed_by") @db.Uuid
+  reviewedAt    DateTime?        @map("reviewed_at") @db.Timestamptz(6)
+  feedback      String?
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  member   Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  task     Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  reviewer Admin? @relation("TaskReviewer", fields: [reviewedBy], references: [id])
+
+  @@map("task_submissions")
+}
+
+model Podcast {
+  id              String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title           String
+  description     String?
+  audioUrl        String     @map("audio_url")
+  thumbnailUrl    String?    @map("thumbnail_url")
+  categoryId      String?    @map("category_id") @db.Uuid
+  accessType      AccessType @default(free) @map("access_type")
+  durationMinutes Int?       @map("duration_minutes")
+  sortOrder       Int        @default(0) @map("sort_order")
+  isPublished     Boolean    @default(false) @map("is_published")
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  category Category?         @relation(fields: [categoryId], references: [id])
+  progress PodcastProgress[]
+
+  @@map("podcasts")
+}
+
+model PodcastProgress {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId            String   @map("member_id") @db.Uuid
+  podcastId           String   @map("podcast_id") @db.Uuid
+  listenPercentage    Int      @default(0) @map("listen_percentage")
+  completed           Boolean  @default(false)
+  lastPositionSeconds Int      @default(0) @map("last_position_seconds")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  member  Member  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  podcast Podcast @relation(fields: [podcastId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, podcastId])
+  @@map("podcast_progress")
+}
+
+model Webinar {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title           String
+  description     String?
+  scheduledAt     DateTime      @map("scheduled_at") @db.Timestamptz(6)
+  durationMinutes Int?          @map("duration_minutes")
+  meetingUrl      String?       @map("meeting_url")
+  recordingUrl    String?       @map("recording_url")
+  status          WebinarStatus @default(scheduled)
+  maxAttendees    Int?          @map("max_attendees")
+  hostId          String?       @map("host_id") @db.Uuid
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  host          Admin?                @relation("WebinarHost", fields: [hostId], references: [id])
+  registrations WebinarRegistration[]
+
+  @@map("webinars")
+}
+
+model WebinarRegistration {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId     String    @map("member_id") @db.Uuid
+  webinarId    String    @map("webinar_id") @db.Uuid
+  registeredAt DateTime  @default(now()) @map("registered_at") @db.Timestamptz(6)
+  attended     Boolean   @default(false)
+  joinTime     DateTime? @map("join_time") @db.Timestamptz(6)
+  leaveTime    DateTime? @map("leave_time") @db.Timestamptz(6)
+
+  // Relations
+  member  Member  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  webinar Webinar @relation(fields: [webinarId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, webinarId])
+  @@map("webinar_registrations")
+}
+
+model Event {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title           String
+  description     String?
+  eventType       String   @map("event_type")
+  eventDate       DateTime @map("event_date") @db.Timestamptz(6)
+  location        String?
+  isOnline        Boolean  @default(false) @map("is_online")
+  registrationUrl String?  @map("registration_url")
+  maxAttendees    Int?     @map("max_attendees")
+  status          String   @default("scheduled")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  registrations EventRegistration[]
+
+  @@map("events")
+}
+
+model EventRegistration {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId     String    @map("member_id") @db.Uuid
+  eventId      String    @map("event_id") @db.Uuid
+  registeredAt DateTime  @default(now()) @map("registered_at") @db.Timestamptz(6)
+  attended     Boolean   @default(false)
+  checkInTime  DateTime? @map("check_in_time") @db.Timestamptz(6)
+
+  // Relations
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  event  Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, eventId])
+  @@map("event_registrations")
+}
+
+model Post {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId       String   @map("member_id") @db.Uuid
+  content        String
+  postType       PostType @default(post) @map("post_type")
+  mediaUrls      String[] @map("media_urls")
+  isPinned       Boolean  @default(false) @map("is_pinned")
+  isAnnouncement Boolean  @default(false) @map("is_announcement")
+  likesCount     Int      @default(0) @map("likes_count")
+  commentsCount  Int      @default(0) @map("comments_count")
+  status         String   @default("active")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  member   Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  comments Comment[]
+  likes    Like[]
+  polls    Poll[]
+
+  @@map("community_posts")
+}
+
+model Poll {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  postId    String    @unique @map("post_id") @db.Uuid
+  question  String
+  endsAt    DateTime? @map("ends_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  post    Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
+  options PollOption[]
+
+  @@map("community_polls")
+}
+
+model PollOption {
+  id         String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  pollId     String @map("poll_id") @db.Uuid
+  optionText String @map("option_text")
+  votesCount Int    @default(0) @map("votes_count")
+
+  // Relations
+  poll  Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  votes PollVote[]
+
+  @@map("community_poll_options")
+}
+
+model PollVote {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId  String   @map("member_id") @db.Uuid
+  optionId  String   @map("option_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  member Member     @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  option PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, optionId])
+  @@map("community_poll_votes")
+}
+
+model Comment {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  postId          String   @map("post_id") @db.Uuid
+  memberId        String   @map("member_id") @db.Uuid
+  content         String
+  parentCommentId String?  @map("parent_comment_id") @db.Uuid
+  likesCount      Int      @default(0) @map("likes_count")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  post          Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  member        Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  parentComment Comment?  @relation("Thread", fields: [parentCommentId], references: [id])
+  replies       Comment[] @relation("Thread")
+  likes         Like[]
+
+  @@map("community_comments")
+}
+
+model Like {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId  String   @map("member_id") @db.Uuid
+  postId    String?  @map("post_id") @db.Uuid
+  commentId String?  @map("comment_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  member  Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  post    Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, postId, commentId])
+  @@map("community_likes")
+}
+
+model Banner {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title          String
+  imageUrl       String    @map("image_url")
+  linkUrl        String?   @map("link_url")
+  targetAudience String?   @map("target_audience")
+  placement      String?
+  priority       Int       @default(0)
+  startsAt       DateTime? @map("starts_at") @db.Timestamptz(6)
+  expiresAt      DateTime? @map("expires_at") @db.Timestamptz(6)
+  isActive       Boolean   @default(true) @map("is_active")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("banners")
+}
+
+model SupportTicket {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId    String       @map("member_id") @db.Uuid
+  category    String
+  subject     String
+  description String
+  priority    Priority     @default(medium)
+  status      TicketStatus @default(open)
+  assignedTo  String?      @map("assigned_to") @db.Uuid
+  resolvedAt  DateTime?    @map("resolved_at") @db.Timestamptz(6)
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime     @default(now()) @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  member   Member           @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  assignee Admin?           @relation("TicketAssignee", fields: [assignedTo], references: [id])
+  messages SupportMessage[]
+
+  @@map("support_tickets")
+}
+
+model SupportMessage {
+  id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ticketId    String     @map("ticket_id") @db.Uuid
+  senderId    String     @map("sender_id") @db.Uuid
+  senderType  SenderType @map("sender_type")
+  message     String
+  attachments String[]
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@map("support_messages")
+}
+
+model Notification {
+  id       String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId String           @map("member_id") @db.Uuid
+  title    String
+  body     String
+  type     NotificationType @default(system)
+  data     Json?
+  isRead   Boolean          @default(false) @map("is_read")
+  sentAt   DateTime         @default(now()) @map("sent_at") @db.Timestamptz(6)
+
+  // Relations
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model NotificationTemplate {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventType     String   @unique @map("event_type")
+  titleTemplate String   @map("title_template")
+  bodyTemplate  String   @map("body_template")
+  channels      String[]
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@map("notification_templates")
+}
+
+model Batch {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  description String?
+  programId   String   @map("program_id") @db.Uuid
+  startsAt    DateTime @map("starts_at") @db.Timestamptz(6)
+  endsAt      DateTime @map("ends_at") @db.Timestamptz(6)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  program Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  members Member[]
+
+  @@map("batches")
+}
+
+model Category {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  type      String
+  parentId  String?  @map("parent_id") @db.Uuid
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  parent   Category?  @relation("SubCategories", fields: [parentId], references: [id])
+  children Category[] @relation("SubCategories")
+  courses  Course[]
+  podcasts Podcast[]
+
+  @@map("categories")
+}
+
+model Reward {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name           String
+  description    String?
+  requiredPoints Int      @map("required_points")
+  category       String?
+  imageUrl       String?  @map("image_url")
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  redemptions RewardRedemption[]
+
+  @@map("rewards")
+}
+
+model RewardRedemption {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId   String    @map("member_id") @db.Uuid
+  rewardId   String    @map("reward_id") @db.Uuid
+  status     String    @default("pending")
+  approvedBy String?   @map("approved_by") @db.Uuid
+  approvedAt DateTime? @map("approved_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @default(now()) @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  reward Reward @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+
+  @@map("reward_redemptions")
+}
+
+model Badge {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  description String?
+  iconUrl     String   @map("icon_url")
+  criteria    Json?
+  badgeType   String   @map("badge_type")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  members MemberBadge[]
+
+  @@map("badges")
+}
+
+model MemberBadge {
+  id       String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId String   @map("member_id") @db.Uuid
+  badgeId  String   @map("badge_id") @db.Uuid
+  earnedAt DateTime @default(now()) @map("earned_at") @db.Timestamptz(6)
+
+  // Relations
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  badge  Badge  @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, badgeId])
+  @@map("member_badges")
+}
+
+model Milestone {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  programId   String   @map("program_id") @db.Uuid
+  name        String
+  dayNumber   Int      @map("day_number")
+  criteria    Json?
+  bonusPoints Int      @default(0) @map("bonus_points")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  program Program           @relation(fields: [programId], references: [id], onDelete: Cascade)
+  members MemberMilestone[]
+
+  @@map("milestones")
+}
+
+model MemberMilestone {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId    String   @map("member_id") @db.Uuid
+  milestoneId String   @map("milestone_id") @db.Uuid
+  achievedAt  DateTime @default(now()) @map("achieved_at") @db.Timestamptz(6)
+
+  // Relations
+  member    Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  milestone Milestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, milestoneId])
+  @@map("member_milestones")
+}
+
+model Streak {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId         String   @map("member_id") @db.Uuid
+  streakType       String   @map("streak_type")
+  currentCount     Int      @default(0) @map("current_count")
+  longestCount     Int      @default(0) @map("longest_count")
+  lastActivityDate DateTime @map("last_activity_date") @db.Date
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, streakType])
+  @@map("streaks")
+}
+
+model PointsLedger {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId      String   @map("member_id") @db.Uuid
+  points        Int
+  reason        String
+  referenceType String?  @map("reference_type")
+  referenceId   String?  @map("reference_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@map("points_ledger")
+}
+
+model Subscription {
+  id                     String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId               String         @map("member_id") @db.Uuid
+  plan                   MembershipPlan
+  razorpaySubscriptionId String?        @map("razorpay_subscription_id")
+  status                 String         @default("active")
+  startsAt               DateTime       @map("starts_at") @db.Timestamptz(6)
+  endsAt                 DateTime       @map("ends_at") @db.Timestamptz(6)
+  amount                 Decimal        @db.Decimal(10, 2)
+  createdAt              DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime       @default(now()) @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  member   Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  payments Payment[]
+
+  @@map("subscriptions")
+}
+
+model Payment {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId          String   @map("member_id") @db.Uuid
+  subscriptionId    String?  @map("subscription_id") @db.Uuid
+  razorpayPaymentId String?  @map("razorpay_payment_id")
+  amount            Decimal  @db.Decimal(10, 2)
+  status            String   @default("paid")
+  paidAt            DateTime @default(now()) @map("paid_at") @db.Timestamptz(6)
+
+  // Relations
+  member       Member        @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id])
+
+  @@map("payments")
+}
+
+model KycDocument {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId     String    @map("member_id") @db.Uuid
+  documentType String    @map("document_type")
+  documentUrl  String    @map("document_url")
+  status       String    @default("pending")
+  verifiedBy   String?   @map("verified_by") @db.Uuid
+  verifiedAt   DateTime? @map("verified_at") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@map("kyc_documents")
+}
+
+model AuditLog {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  adminId   String   @map("admin_id") @db.Uuid
+  action    String
+  tableName String   @map("table_name")
+  recordId  String   @map("record_id") @db.Uuid
+  oldData   Json?    @map("old_data")
+  newData   Json?    @map("new_data")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  admin Admin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@map("audit_logs")
+}
+
+model ActivityLog {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  userType  String   @map("user_type")
+  action    String
+  metadata  Json?
+  ipAddress String?  @map("ip_address")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  member Member? @relation(fields: [userId], references: [id], map: "activity_logs_member_id_fkey")
+
+  @@map("activity_logs")
+}
+
+model MemberSession {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId        String    @map("member_id") @db.Uuid
+  startedAt       DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  endedAt         DateTime? @map("ended_at") @db.Timestamptz(6)
+  durationMinutes Int?      @map("duration_minutes")
+
+  // Relations
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@map("member_sessions")
+}
+
+model AutomationRule {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  triggerEvent String   @map("trigger_event")
+  conditions   Json?
+  actions      Json?
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("automation_rules")
+}
+
+model WhatsappMessage {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId     String   @map("member_id") @db.Uuid
+  templateName String   @map("template_name")
+  messageBody  String   @map("message_body")
+  status       String   @default("sent")
+  sentAt       DateTime @default(now()) @map("sent_at") @db.Timestamptz(6)
+
+  // Relations
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@map("whatsapp_messages")
+}
+
+model Assessment {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId       String   @map("member_id") @db.Uuid
+  programId      String   @map("program_id") @db.Uuid
+  assessmentType String   @map("assessment_type")
+  data           Json?
+  videoUrl       String?  @map("video_url")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  member  Member  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@map("before_after_assessments")
+}
+
+model Checklist {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  programId String   @map("program_id") @db.Uuid
+  category  String
+  itemText  String   @map("item_text")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  program     Program               @relation(fields: [programId], references: [id], onDelete: Cascade)
+  completions ChecklistCompletion[]
+
+  @@map("checklists")
+}
+
+model ChecklistCompletion {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId    String   @map("member_id") @db.Uuid
+  checklistId String   @map("checklist_id") @db.Uuid
+  completedAt DateTime @default(now()) @map("completed_at") @db.Timestamptz(6)
+
+  // Relations
+  member    Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  checklist Checklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, checklistId])
+  @@map("checklist_completions")
+}
+
+model Resource {
+  id           String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title        String
+  resourceType String     @map("resource_type")
+  fileUrl      String     @map("file_url")
+  accessType   AccessType @default(free) @map("access_type")
+  visibility   Json?
+  createdBy    String?    @map("created_by") @db.Uuid
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  creator Admin? @relation(fields: [createdBy], references: [id])
+
+  @@map("resources")
+}
+
+model Faq {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  category  String
+  question  String
+  answer    String
+  videoUrl  String?  @map("video_url")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@map("faqs")
+}
+
+model Leaderboard {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId     String   @map("member_id") @db.Uuid
+  period       String
+  totalPoints  Int      @map("total_points")
+  rank         Int
+  calculatedAt DateTime @default(now()) @map("calculated_at") @db.Timestamptz(6)
+
+  // Relations
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@map("leaderboards")
+}
+
+model Setting {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key       String   @unique
+  value     Json
+  category  String?
+  updatedBy String?  @map("updated_by") @db.Uuid
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  // Relations
+  updater Admin? @relation("SettingUpdater", fields: [updatedBy], references: [id])
+
+  @@map("settings")
 }

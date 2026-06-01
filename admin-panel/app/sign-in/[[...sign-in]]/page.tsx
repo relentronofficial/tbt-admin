@@ -174,7 +174,7 @@ export default function SignInPage() {
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
+                    placeholder="Enter password"
                     className="w-full bg-[#141414] border border-[#2a2a2a] rounded-[8px] text-[#e0e0e0] text-[14px] py-[13px] pl-[42px] pr-[42px] outline-none transition-all duration-200 focus:border-[#e02020] focus:ring-[3px] focus:ring-[#e02020]/12 placeholder:text-[#444]"
                     required
                   />

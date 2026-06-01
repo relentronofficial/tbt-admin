@@ -23,8 +23,7 @@ export async function refreshTokenHandler(request: FastifyRequest, reply: Fastif
 export async function getMeHandler(request: FastifyRequest, reply: FastifyReply) {
   try {
     const admin = await request.server.prisma.admin.findUnique({
-      where: { id: request.user as string },
-      include: { rbac: true },
+      where: { clerkId: request.user },
     });
 
     if (!admin) {

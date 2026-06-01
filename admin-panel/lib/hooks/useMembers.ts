@@ -60,3 +60,16 @@ export const useGetManagers = () => {
     },
   });
 };
+
+export const useCreateManager = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { fullName: string; email: string; phone?: string; designation?: string }) => {
+      const res: any = await apiClient.post('/api/members/managers', data);
+      return res.data || res;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['managers'] });
+    },
+  });
+};

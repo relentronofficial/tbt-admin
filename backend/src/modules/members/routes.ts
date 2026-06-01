@@ -5,13 +5,15 @@ import {
   getMemberHandler,
   updateMemberHandler,
   deleteMemberHandler,
-  getManagersHandler
+  getManagersHandler,
+  createManagerHandler,
 } from './controller.js';
 
 export async function memberRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', fastify.authenticate);
 
   fastify.get('/managers', getManagersHandler);
+  fastify.post('/managers', createManagerHandler);
   fastify.get('/', listMembersHandler);
   fastify.post('/', createMemberHandler);
   fastify.get('/:id', getMemberHandler);

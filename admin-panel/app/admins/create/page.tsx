@@ -82,14 +82,14 @@ export default function CreateAdminPage() {
   } = useForm<CreateAdminInput>({
     resolver: zodResolver(createAdminSchema),
     defaultValues: {
-      adminId: "",
+      employeeId: "",
       fullName: "",
       email: "",
-      contactNumber: "",
-      alternateContact: "",
-      dateOfBirth: "",
+      phone: "",
+      alternatePhone: "",
+      dob: "",
       bloodGroup: "B+ve",
-      role: "Manager",
+      role: "account_manager",
       department: "Operations",
       country: "India",
       state: "Tamil Nadu",
@@ -97,7 +97,7 @@ export default function CreateAdminPage() {
       city: "Chennai",
       address: "",
       username: "",
-      accountStatus: "Active",
+      status: "active",
       password: "",
       confirmPassword: "",
       twoFactorEnabled: true,
@@ -156,7 +156,7 @@ export default function CreateAdminPage() {
 
   useEffect(() => {
     if (generatedAdminId) {
-      setValue("adminId", generatedAdminId);
+      setValue("employeeId", generatedAdminId);
     }
   }, [generatedAdminId, setValue]);
 
@@ -287,7 +287,7 @@ export default function CreateAdminPage() {
         profilePhotoUrl = publicUrl;
       }
 
-      await createAdmin.mutateAsync({ ...data, profilePhoto: profilePhotoUrl });
+      await createAdmin.mutateAsync({ ...data, profilePhotoUrl });
       toast.success("Admin created successfully!");
       setTimeout(() => router.push("/admins"), 1500);
     } catch (err: any) {
@@ -330,7 +330,7 @@ export default function CreateAdminPage() {
               <div className="flex items-center gap-3">
                 <div className="flex-1 relative">
                   <input 
-                    {...register("adminId")}
+                    {...register("employeeId")}
                     type="text" 
                     readOnly
                     className="w-full bg-[#141414] border border-[#333] rounded-md py-3 px-4 text-[14px] font-mono font-bold text-[#e02020] outline-none cursor-default" 
@@ -405,7 +405,7 @@ export default function CreateAdminPage() {
                 <div className="flex">
                   <span className="bg-[#1a1a1a] border border-[#333] border-r-0 rounded-l-md px-3 flex items-center text-[#666] text-[12px]">+91</span>
                   <input 
-                    {...register("contactNumber")}
+                    {...register("phone")}
                     className={cn("w-full bg-[#1f1f1f] border border-[#333] rounded-r-md py-2.5 px-4 text-[13.5px] outline-none focus:border-[#e02020] transition-all text-[#f0f0f0]", errors.contactNumber && "border-red-500/50")} 
                     placeholder="Enter mobile number" 
                   />
@@ -415,13 +415,13 @@ export default function CreateAdminPage() {
 
               <div className="field">
                 <label>Alternate Contact</label>
-                <input {...register("alternateContact")} className="w-full bg-[#1f1f1f] border border-[#333] rounded-md py-2.5 px-4 text-[13.5px] outline-none focus:border-[#e02020] transition-all text-[#f0f0f0]" placeholder="Optional" />
+                <input {...register("alternatePhone")} className="w-full bg-[#1f1f1f] border border-[#333] rounded-md py-2.5 px-4 text-[13.5px] outline-none focus:border-[#e02020] transition-all text-[#f0f0f0]" placeholder="Optional" />
               </div>
 
               <div className="field">
                 <label>Date of Birth</label>
                 <input 
-                  {...register("dateOfBirth")}
+                  {...register("dob")}
                   type="date"
                   className={cn("w-full bg-[#1f1f1f] border border-[#333] rounded-md py-2.5 px-4 text-[13.5px] outline-none focus:border-[#e02020] transition-all text-[#f0f0f0] color-scheme-dark", errors.dateOfBirth && "border-red-500/50")} 
                 />
@@ -456,10 +456,11 @@ export default function CreateAdminPage() {
                 <label>Access Privilege</label>
                 <div className="relative">
                   <select {...register("role")} className="w-full bg-[#1f1f1f] border border-[#333] rounded-md py-2.5 px-4 text-[13.5px] outline-none focus:border-[#e02020] appearance-none transition-all text-[#f0f0f0] cursor-pointer uppercase font-bold tracking-wider">
-                    <option value="SuperAdmin">Super Admin (Root)</option>
-                    <option value="Manager">Manager</option>
-                    <option value="Moderator">Moderator</option>
-                    <option value="Viewer">Viewer (Read Only)</option>
+                    <option value="super_admin">Super Admin</option>
+                    <option value="admin">Admin</option>
+                    <option value="account_manager">Account Manager</option>
+                    <option value="mentor">Mentor</option>
+                    <option value="moderator">Moderator</option>
                   </select>
                   <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#444] pointer-events-none" />
                 </div>
@@ -521,7 +522,7 @@ export default function CreateAdminPage() {
                               className="w-full px-4 py-3 text-left hover:bg-[#e02020]/10 border-b border-[#333]/30 last:border-0 group transition-colors"
                             >
                               <p className="text-[13px] text-[#f0f0f0] font-medium group-hover:text-[#e02020]">{m.fullName}</p>
-                              <p className="text-[11px] text-[#606060]">{m.designation} · {m.employeeId}</p>
+                              <p className="text-[11px] text-[#606060]">{m.designation} &middot; {m.employeeId}</p>
                             </button>
                           ))}
                         </div>
@@ -690,10 +691,11 @@ export default function CreateAdminPage() {
               <div className="field">
                 <label>Account Status</label>
                 <div className="relative">
-                  <select {...register("accountStatus")} className="w-full bg-[#1f1f1f] border border-[#333] rounded-md py-2.5 px-4 text-[13.5px] outline-none focus:border-[#e02020] appearance-none transition-all text-[#f0f0f0] cursor-pointer">
-                    <option value="Active">Active</option>
-                    <option value="Inactive">Inactive</option>
-                    <option value="Suspended">Suspended</option>
+                  <select {...register("status")} className="w-full bg-[#1f1f1f] border border-[#333] rounded-md py-2.5 px-4 text-[13.5px] outline-none focus:border-[#e02020] appearance-none transition-all text-[#f0f0f0] cursor-pointer">
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="suspended">Suspended</option>
+                    <option value="pending_approval">Pending Approval</option>
                   </select>
                   <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#444] pointer-events-none" />
                 </div>

@@ -63,7 +63,8 @@ async function bootstrap() {
     await fastify.register(uploadRoutes, { prefix: '/api/upload' });
     await fastify.register(locationRoutes, { prefix: '/api/location' });
 
-    // Health Check
+    // Root + Health Check
+    fastify.get('/', async () => ({ name: 'TBT Admin API', status: 'ok' }));
     fastify.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
 
     const port = env.PORT;
