@@ -171,3 +171,12 @@ export const useGetPresignedUrl = () => {
     },
   });
 };
+
+export const useCreateBunnyVideo = () => {
+  return useMutation({
+    mutationFn: async ({ title }: { title: string }) => {
+      const res: any = await apiClient.post('/api/upload/bunny-video-create', { title });
+      return res.data || res;
+    },
+  });
+};

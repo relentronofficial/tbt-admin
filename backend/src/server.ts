@@ -24,6 +24,17 @@ import { dashboardRoutes } from './modules/dashboard/routes.js';
 import { notificationRoutes } from './modules/notifications/routes.js';
 import { uploadRoutes } from './modules/upload/routes.js';
 import { locationRoutes } from './modules/location/routes.js';
+import { userRoutes } from './modules/user/routes.js';
+import { workshopRoutes } from './modules/workshops/routes.js';
+import { heroRoutes } from './modules/hero/routes.js';
+import { contentSectionRoutes } from './modules/content-sections/routes.js';
+import { tierRoutes } from './modules/tiers/routes.js';
+import { displayBadgeRoutes } from './modules/display-badges/routes.js';
+import { productRoutes } from './modules/products/routes.js';
+import { appResourceRoutes } from './modules/app-resources/routes.js';
+import { appNotificationRoutes } from './modules/app-notifications/routes.js';
+import { configRoutes } from './modules/config/routes.js';
+import { batchRoutes } from './modules/batches/routes.js';
 
 async function bootstrap() {
   const fastify = Fastify({
@@ -62,6 +73,17 @@ async function bootstrap() {
     await fastify.register(notificationRoutes, { prefix: '/api/notifications' });
     await fastify.register(uploadRoutes, { prefix: '/api/upload' });
     await fastify.register(locationRoutes, { prefix: '/api/location' });
+    await fastify.register(userRoutes, { prefix: '/api/user' });
+    await fastify.register(workshopRoutes, { prefix: '/api/workshops' });
+    await fastify.register(heroRoutes, { prefix: '/api/hero-slides' });
+    await fastify.register(contentSectionRoutes, { prefix: '/api/content-sections' });
+    await fastify.register(tierRoutes, { prefix: '/api/tiers' });
+    await fastify.register(displayBadgeRoutes, { prefix: '/api/display-badges' });
+    await fastify.register(productRoutes, { prefix: '/api/products' });
+    await fastify.register(appResourceRoutes, { prefix: '/api/app-resources' });
+    await fastify.register(appNotificationRoutes, { prefix: '/api/app-notifications' });
+    await fastify.register(configRoutes, { prefix: '/api/config' });
+    await fastify.register(batchRoutes, { prefix: '/api/batches' });
 
     // Root + Health Check
     fastify.get('/', async () => ({ name: 'TBT Admin API', status: 'ok' }));

@@ -1,376 +1,611 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { 
-  Info, 
-  CheckCircle2, 
-  Target, 
-  Rocket, 
-  ChevronDown, 
-  Camera, 
-  Paperclip, 
-  Play, 
-  Link as LinkIcon,
-  Gem,
-  Loader2,
-  ChevronRight
+import { useState, useEffect, useRef } from "react";
+import {
+  Plus, Trash2, Pencil, X, Loader2, BookOpen, Search, Film,
+  Eye, EyeOff, AlertCircle, GripVertical, Save, Image as ImageIcon, Upload,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { useCreateTaskInitiative } from "@/lib/hooks/useTasks";
-import { cn } from "@/lib/utils";
+import {
+  useListVodCourses, useCreateVodCourse, useUpdateVodCourse, useDeleteVodCourse,
+  useListCourseEpisodes, useCreateCourseEpisode, useUpdateCourseEpisode,
+  useDeleteCourseEpisode, useReorderCourseEpisodes,
+} from "@/lib/hooks/useTbt";
+import { useGetPresignedUrl, useCreateBunnyVideo } from "@/lib/hooks/useAdmin";
 import { toast } from "react-hot-toast";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 
-// Zod Schema for Task Initiative
-const taskInitiativeSchema = z.object({
-  dayNumber: z.string().regex(/^D\d{1,3}$/, "Day number must be in format D01-D90").refine((val) => {
-    const num = parseInt(val.substring(1));
-    return num >= 1 && num <= 90;
-  }, "Day must be between 01 and 90"),
-  stepCategory: z.string().min(1, "Step category is required"),
-  taskTitle: z.string().min(1, "Task title is required"),
-  taskDescription: z.string().min(1, "Task description is required"),
-  basePoints: z.coerce.number().min(0).max(1000).default(100),
-  proofType: z.string().default("Tick Completion"),
-  isMilestone: z.boolean().default(true),
-  milestoneLabel: z.string().optional(),
-  bonusPoints: z.coerce.number().optional().default(0),
-}).refine((data) => {
-  if (data.isMilestone && (!data.milestoneLabel || data.milestoneLabel.trim() === "")) {
-    return false;
-  }
-  return true;
-}, {
-  message: "Milestone label is required when marked as milestone",
-  path: ["milestoneLabel"],
-});
+const toSlug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
-type TaskInitiativeInput = z.infer<typeof taskInitiativeSchema>;
+const EMPTY_COURSE = { title: "", slug: "", description: "", thumbnailUrl: "", requiredTier: "1", isActive: true };
+const EMPTY_EP = { title: "", videoUrl: "", thumbnailUrl: "", durationSeconds: "", isVisible: true };
 
-const STEP_CATEGORIES = [
-  "Step 0 – Onboarding",
-  "Step 1 – BMC & Metrics",
-  "Step 2 – Reels",
-  "Step 3 – Canva",
-  "Step 4 – Website",
-  "Step 5 – Ecom Ads",
-  "Step 6 – Drip Marketing",
-  "Step 7&8 – Thinking",
-  "Step 9&10 – Automation"
-];
+// ── Single-file upload button ─────────────────────────────────────────
+function FileUploadBtn({
+  label, value, accept, bucket, pathPrefix, onUploaded, uploading, setUploading, uploadKey,
+}: {
+  label: string; value: string; accept: string; bucket: string; pathPrefix: string;
+  onUploaded: (url: string) => void; uploading: string | null;
+  setUploading: (k: string | null) => void; uploadKey: string;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const getPresignedUrl = useGetPresignedUrl();
+  const isUploading = uploading === uploadKey;
 
-const PROOF_TYPES = [
-  { label: "Tick Completion", icon: CheckCircle2, color: "text-green-500" },
-  { label: "Screenshot", icon: Camera, color: "text-blue-500" },
-  { label: "Upload File", icon: Paperclip, color: "text-purple-500" },
-  { label: "Video", icon: Play, color: "text-red-500" },
-  { label: "Link", icon: LinkIcon, color: "text-amber-500" }
-];
-
-export default function CreateTaskInitiativePage() {
-  const router = useRouter();
-  const createTask = useCreateTaskInitiative();
-  const [lastAutosave, setLastAutosave] = useState<string>("");
-
-  const {
-    register,
-    handleSubmit,
-    watch,
-    setValue,
-    formState: { errors, isSubmitting }
-  } = useForm<TaskInitiativeInput>({
-    resolver: zodResolver(taskInitiativeSchema),
-    defaultValues: {
-      basePoints: 100,
-      proofType: "Tick Completion",
-      isMilestone: true,
-      bonusPoints: 0
-    }
-  });
-
-  const isMilestone = watch("isMilestone");
-  const selectedProofType = watch("proofType");
-  const currentValues = watch();
-
-  // Autosave logic
-  useEffect(() => {
-    const timer = setInterval(() => {
-      localStorage.setItem("task_draft", JSON.stringify(currentValues));
-      const now = new Date();
-      setLastAutosave(formatTime(now));
-    }, 30000);
-    return () => clearInterval(timer);
-  }, [currentValues]);
-
-  // Load draft
-  useEffect(() => {
-    const draft = localStorage.getItem("task_draft");
-    if (draft) {
-       // Optional: prompt user to restore
-    }
-    setLastAutosave(formatTime(new Date()));
-  }, []);
-
-  const onSubmit = async (data: TaskInitiativeInput) => {
+  const handleFile = async (file: File) => {
     try {
-      await createTask.mutateAsync(data);
-      toast.success("Task Initiative created successfully");
-      localStorage.removeItem("task_draft");
-      router.push("/tasks");
-    } catch (err: any) {
-      toast.error(err.message || "Failed to create task initiative");
+      setUploading(uploadKey);
+      const { uploadUrl, publicUrl } = await getPresignedUrl.mutateAsync({
+        filename: file.name, contentType: file.type, bucket, pathPrefix,
+      });
+      await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      onUploaded(publicUrl);
+      toast.success(`${label} uploaded`);
+    } catch (e: any) {
+      toast.error(e.message || "Upload failed");
+    } finally {
+      setUploading(null);
     }
   };
 
   return (
-    <DashboardLayout>
-      <div className="max-w-[900px] mx-auto pb-24 font-sans">
-        
-        {/* PAGE HEADER */}
-        <header className="mb-10">
-           <h2 className="text-[#666] font-bold text-[13px] tracking-widest uppercase font-rajdhani">Task Manager</h2>
-           <nav className="flex items-center gap-2 mt-1 mb-4 text-[11px] font-bold uppercase tracking-widest font-rajdhani">
-              <span className="text-[#666]">Dashboard</span>
-              <ChevronRight size={12} className="text-[#333]" />
-              <span className="text-[#666]">90-Day Tasks</span>
-              <ChevronRight size={12} className="text-[#333]" />
-              <span className="text-[#d4a853]">Add New Task</span>
-           </nav>
-           <h1 className="text-white text-[32px] font-extrabold leading-none mb-2 font-rajdhani">Create Task Initiative</h1>
-           <p className="text-[#888] text-[15px]">Define a new operational task for the 90-day onboarding sequence.</p>
-        </header>
-
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-[28px]">
-          
-          {/* SECTION 01: BASIC INFORMATION */}
-          <SectionCard icon={Info} title="SECTION 01: BASIC INFORMATION">
-             <div className="grid grid-cols-1 md:grid-cols-10 gap-6">
-                <div className="md:col-span-4">
-                   <Label>Day Number</Label>
-                   <Input 
-                      placeholder="D01-D90" 
-                      {...register("dayNumber")}
-                      error={errors.dayNumber?.message}
-                   />
-                </div>
-                <div className="md:col-span-6">
-                   <Label>Step Category</Label>
-                   <div className="relative">
-                      <select 
-                        {...register("stepCategory")}
-                        className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-[8px] h-[48px] px-4 text-white appearance-none outline-none focus:border-[#dc2626] transition-all"
-                      >
-                         <option value="">Select Category</option>
-                         {STEP_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                      </select>
-                      <ChevronDown size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#555] pointer-events-none" />
-                   </div>
-                   {errors.stepCategory && <p className="text-[12px] text-[#dc2626] mt-1 uppercase font-bold tracking-wider">{errors.stepCategory.message}</p>}
-                </div>
-             </div>
-             
-             <div className="mt-6">
-                <Label>Task Title</Label>
-                <Input 
-                   placeholder="Enter high-level objective title" 
-                   {...register("taskTitle")}
-                   error={errors.taskTitle?.message}
-                />
-             </div>
-
-             <div className="mt-6">
-                <Label>Task Description & Instructions</Label>
-                <textarea 
-                   {...register("taskDescription")}
-                   placeholder="Detailed breakdown of requirements..."
-                   className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-[8px] min-h-[160px] p-4 text-white outline-none focus:border-[#dc2626] transition-all resize-y"
-                />
-                {errors.taskDescription && <p className="text-[12px] text-[#dc2626] mt-1 uppercase font-bold tracking-wider">{errors.taskDescription.message}</p>}
-             </div>
-          </SectionCard>
-
-          {/* SECTION 02: POINTS & PROOF */}
-          <SectionCard icon={CheckCircle2} title="SECTION 02: POINTS & PROOF">
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                   <Label>Base Points (Max)</Label>
-                   <div className="relative">
-                      <input 
-                         type="number"
-                         {...register("basePoints")}
-                         className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-[8px] h-[48px] px-4 text-white outline-none focus:border-[#dc2626] transition-all"
-                      />
-                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[#666] font-bold text-[12px]">XP</span>
-                   </div>
-                   {errors.basePoints && <p className="text-[12px] text-[#dc2626] mt-1 uppercase font-bold tracking-wider">{errors.basePoints.message}</p>}
-                </div>
-                <div>
-                   <Label>Proof Type Required</Label>
-                   <div className="relative">
-                      <select 
-                        {...register("proofType")}
-                        className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-[8px] h-[48px] px-4 pl-10 text-white appearance-none outline-none focus:border-[#dc2626] transition-all"
-                      >
-                         {PROOF_TYPES.map(pt => <option key={pt.label} value={pt.label}>{pt.label}</option>)}
-                      </select>
-                      <ChevronDown size={18} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#555] pointer-events-none" />
-                      {(() => {
-                         const pt = PROOF_TYPES.find(p => p.label === selectedProofType);
-                         const Icon = pt?.icon || CheckCircle2;
-                         return <Icon size={18} className={cn("absolute left-4 top-1/2 -translate-y-1/2", pt?.color || "text-[#555]")} />;
-                      })()}
-                   </div>
-                </div>
-             </div>
-          </SectionCard>
-
-          {/* SECTION 03: MILESTONE CONFIGURATION */}
-          <SectionCard icon={Target} title="SECTION 03: MILESTONE CONFIGURATION">
-             <div className="bg-[#161616] border border-[#222] rounded-[8px] p-[16px_20px] flex items-center justify-between mb-6 transition-all">
-                <div className="flex items-center gap-4">
-                   <div className="w-10 h-10 bg-[#dc2626]/10 rounded-full flex items-center justify-center border border-[#dc2626]/20">
-                      <Gem size={20} className="text-[#dc2626]" />
-                   </div>
-                   <div>
-                      <h4 className="text-white font-bold text-[15px] leading-tight">Mark as Milestone Day</h4>
-                      <p className="text-[#666] text-[13px]">Elevates this task to a critical success milestone</p>
-                   </div>
-                </div>
-                <button 
-                   type="button"
-                   onClick={() => setValue("isMilestone", !isMilestone)}
-                   className={cn(
-                     "w-12 h-6 rounded-full relative transition-all duration-300",
-                     isMilestone ? "bg-[#dc2626]" : "bg-[#333]"
-                   )}
-                >
-                   <div className={cn(
-                     "w-4 h-4 bg-white rounded-full absolute top-1 transition-all duration-300",
-                     isMilestone ? "right-1" : "left-1"
-                   )} />
-                </button>
-             </div>
-
-             {isMilestone && (
-               <div className="grid grid-cols-1 md:grid-cols-10 gap-6 animate-in fade-in slide-in-from-top-2 duration-300">
-                  <div className="md:col-span-6">
-                     <Label>Milestone Label</Label>
-                     <Input 
-                        placeholder="e.g. Phase 1 Completion" 
-                        {...register("milestoneLabel")}
-                        error={errors.milestoneLabel?.message}
-                     />
-                  </div>
-                  <div className="md:col-span-4">
-                     <Label>Bonus Points</Label>
-                     <div className="relative">
-                        <input 
-                           type="number"
-                           {...register("bonusPoints")}
-                           placeholder="+50"
-                           className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-[8px] h-[48px] px-4 text-white outline-none focus:border-[#dc2626] transition-all"
-                        />
-                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[#666] font-bold text-[12px]">XP</span>
-                     </div>
-                  </div>
-               </div>
-             )}
-          </SectionCard>
-
-        </form>
-
-        {/* STICKY FOOTER BAR */}
-        <footer className="fixed bottom-0 left-[220px] right-0 h-[60px] bg-[#0a0a0a] border-t border-[#1a1a1a] flex items-center justify-between px-8 z-[40]">
-           <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                 <div className="w-2 h-2 rounded-full bg-[#22c55e]" />
-                 <span className="text-[12px] font-bold text-[#666] tracking-wider">READY FOR DEPLOYMENT</span>
-              </div>
-              <span className="text-[#333]">|</span>
-              <span className="text-[11px] text-[#666] font-medium uppercase tracking-widest">
-                 Last Autosave: <span className="text-[#888]">{lastAutosave}</span>
-              </span>
-           </div>
-
-           <div className="flex items-center gap-6">
-              <button 
-                 type="button"
-                 onClick={() => {
-                   if (Object.keys(currentValues).some(k => (currentValues as any)[k] !== "")) {
-                      if (confirm("You have unsaved changes. Are you sure you want to leave?")) {
-                         router.back();
-                      }
-                   } else {
-                      router.back();
-                   }
-                 }}
-                 className="text-[12px] font-bold text-[#888] uppercase tracking-[1.5px] hover:text-white transition-colors font-rajdhani"
-              >
-                 Cancel
-              </button>
-              <button 
-                 onClick={handleSubmit(onSubmit)}
-                 disabled={isSubmitting}
-                 className="flex items-center gap-2 bg-gradient-to-r from-[#8b1a1a] to-[#dc2626] text-white px-8 py-3 rounded-[8px] font-bold text-[13px] tracking-[2px] uppercase shadow-lg shadow-red-900/20 hover:brightness-110 active:scale-95 transition-all disabled:opacity-50 font-rajdhani"
-              >
-                 {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <Rocket size={16} />}
-                 Create Task
-              </button>
-           </div>
-        </footer>
-      </div>
-    </DashboardLayout>
-  );
-}
-
-// HELPER COMPONENTS
-function SectionCard({ icon: Icon, title, children }: { icon: any, title: string, children: React.ReactNode }) {
-  return (
-    <div className="bg-[#111] border border-[#1e1e1e] rounded-[12px] overflow-hidden relative shadow-xl">
-       <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-[#8b1a1a]" />
-       <div className="p-8">
-          <div className="flex items-center gap-2.5 mb-8">
-             <div className="w-8 h-8 rounded-lg bg-[#1a1a1a] border border-[#2a2a2a] flex items-center justify-center">
-                <Icon size={16} className="text-[#dc2626]" />
-             </div>
-             <h3 className="text-white text-[16px] font-bold tracking-widest uppercase font-rajdhani">{title}</h3>
+    <div>
+      <label className="block text-[11px] font-bold text-[#606060] uppercase tracking-widest mb-2 font-rajdhani">{label}</label>
+      <div className="flex items-center gap-2">
+        {value && accept.startsWith("image") && (
+          <img src={value} alt="" className="w-14 h-10 rounded object-cover border border-[#333] shrink-0" />
+        )}
+        <button type="button" onClick={() => inputRef.current?.click()} disabled={isUploading}
+          className="flex items-center gap-1.5 bg-[#1a1a1a] border border-[#2a2a2a] text-[#a0a0a0] px-3 py-2 rounded-lg text-[11px] font-bold uppercase tracking-widest font-rajdhani hover:border-[#dc2626] transition-all disabled:opacity-50">
+          {isUploading ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
+          {isUploading ? "Uploading..." : value ? "Replace" : "Upload"}
+        </button>
+        {value && (
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-[10px] text-[#555] font-mono truncate max-w-[140px]">{value.split("/").pop()}</span>
+            <button type="button" onClick={() => onUploaded("")} className="text-[#444] hover:text-red-400 shrink-0"><X size={12} /></button>
           </div>
-          {children}
-       </div>
+        )}
+      </div>
+      <input ref={inputRef} type="file" accept={accept} className="hidden"
+        onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
     </div>
   );
 }
 
-function Label({ children }: { children: React.ReactNode }) {
+// ── Main page ─────────────────────────────────────────────────────────
+export default function CoursesPage() {
+  const [search, setSearch] = useState("");
+  const { data, isLoading } = useListVodCourses({ search });
+  const createCourse = useCreateVodCourse();
+  const updateCourse = useUpdateVodCourse();
+  const deleteCourse = useDeleteVodCourse();
+
+  const courses: any[] = (data as any)?.data || [];
+  const total = (data as any)?.meta?.total || 0;
+
+  const [showCourseForm, setShowCourseForm] = useState(false);
+  const [editingCourse, setEditingCourse] = useState<any>(null);
+  const [deletingCourse, setDeletingCourse] = useState<string | null>(null);
+  const [courseForm, setCourseForm] = useState<any>(EMPTY_COURSE);
+  const [selectedCourse, setSelectedCourse] = useState<any>(null);
+  const [courseUploading, setCourseUploading] = useState<string | null>(null);
+
+  const setCourseField = (k: string, v: any) => setCourseForm((f: any) => ({ ...f, [k]: v }));
+
+  const openCreateCourse = () => { setCourseForm(EMPTY_COURSE); setEditingCourse(null); setShowCourseForm(true); };
+  const openEditCourse = (c: any) => {
+    setCourseForm({ title: c.title, slug: c.slug, description: c.description || "", thumbnailUrl: c.thumbnailUrl || "", requiredTier: String(c.requiredTier ?? 1), isActive: c.isActive ?? true });
+    setEditingCourse(c); setShowCourseForm(true);
+  };
+
+  const handleSaveCourse = async () => {
+    if (!courseForm.title.trim()) return toast.error("Title is required");
+    const slug = courseForm.slug.trim() || toSlug(courseForm.title);
+    const payload = { ...courseForm, slug, requiredTier: Number(courseForm.requiredTier) || 1 };
+    try {
+      if (editingCourse) { await updateCourse.mutateAsync({ id: editingCourse.id, data: payload }); toast.success("Course updated"); }
+      else { await createCourse.mutateAsync(payload); toast.success("Course created"); }
+      setShowCourseForm(false);
+    } catch (e: any) { toast.error(e.message || "Failed"); }
+  };
+
+  const handleDeleteCourse = async (id: string) => {
+    try { await deleteCourse.mutateAsync(id); toast.success("Course deleted"); setDeletingCourse(null); if (selectedCourse?.id === id) setSelectedCourse(null); }
+    catch (e: any) { toast.error(e.message || "Failed"); }
+  };
+
   return (
-    <label className="block text-[#999] text-[11px] font-bold uppercase tracking-[0.08em] mb-2.5 font-rajdhani">
-       {children}
-    </label>
+    <DashboardLayout>
+      <div className="max-w-6xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex gap-3 items-start">
+            <div className="w-1 bg-[#dc2626] rounded-full min-h-[44px]" />
+            <div>
+              <h1 className="font-rajdhani text-2xl font-bold tracking-tight text-[#f0f0f0] uppercase">Courses</h1>
+              <p className="text-[12px] text-[#606060] font-medium uppercase tracking-[1px] font-rajdhani">VOD course library with episodes.</p>
+            </div>
+          </div>
+          <button onClick={openCreateCourse}
+            className="flex items-center gap-2 bg-[#dc2626] text-white px-5 py-2.5 rounded-md font-rajdhani font-bold text-[12px] tracking-widest uppercase hover:bg-red-700 transition-all">
+            <Plus size={15} /> New Course
+          </button>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-[#181818] border border-[#2a2a2a] p-4 rounded-xl flex items-center gap-4">
+            <div className="p-2.5 rounded-lg bg-[#1a1a1a] border border-[#333] text-[#dc2626]"><BookOpen size={20} /></div>
+            <div>
+              <p className="text-[10px] text-[#606060] uppercase font-bold tracking-wider font-rajdhani">Total Courses</p>
+              <p className="text-xl font-bold text-[#f0f0f0] font-rajdhani">{total}</p>
+            </div>
+          </div>
+          <div className="bg-[#181818] border border-[#2a2a2a] p-4 rounded-xl flex items-center gap-4">
+            <div className="p-2.5 rounded-lg bg-[#1a1a1a] border border-[#333] text-blue-400"><Film size={20} /></div>
+            <div>
+              <p className="text-[10px] text-[#606060] uppercase font-bold tracking-wider font-rajdhani">Showing</p>
+              <p className="text-xl font-bold text-[#f0f0f0] font-rajdhani">{courses.length}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Course list + episode panel */}
+        <div className={`grid gap-6 ${selectedCourse ? "grid-cols-[1fr_400px]" : "grid-cols-1"}`}>
+          <div className="bg-[#181818] border border-[#2a2a2a] rounded-xl overflow-hidden">
+            <div className="p-4 border-b border-[#2a2a2a] bg-[#1a1a1a]/50">
+              <div className="relative w-full md:w-72">
+                <input placeholder="Search courses..." value={search} onChange={e => setSearch(e.target.value)}
+                  className="w-full bg-[#141414] border border-[#333] rounded-md py-2.5 pl-10 pr-4 text-[12px] font-rajdhani font-bold tracking-wider outline-none focus:border-[#dc2626] transition-all text-[#f0f0f0] placeholder:text-[#444]" />
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#444]" />
+              </div>
+            </div>
+
+            {isLoading ? (
+              <div className="flex items-center justify-center py-20"><Loader2 size={32} className="animate-spin text-[#dc2626]" /></div>
+            ) : courses.length === 0 ? (
+              <div className="text-center py-20 space-y-3">
+                <BookOpen size={36} className="mx-auto text-[#333]" />
+                <p className="text-[#606060] font-rajdhani font-bold uppercase tracking-widest text-sm">No courses found</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-[#2a2a2a]">
+                {courses.map((c: any) => (
+                  <div key={c.id}
+                    className={`flex items-center gap-4 px-5 py-4 hover:bg-white/[0.02] transition-colors group cursor-pointer
+                      ${selectedCourse?.id === c.id ? "bg-[#dc2626]/5 border-l-2 border-[#dc2626]" : "border-l-2 border-transparent"}`}
+                    onClick={() => setSelectedCourse(selectedCourse?.id === c.id ? null : c)}>
+                    {c.thumbnailUrl ? (
+                      <img src={c.thumbnailUrl} alt="" className="w-14 h-10 object-cover rounded border border-[#333] shrink-0" />
+                    ) : (
+                      <div className="w-14 h-10 rounded border border-[#333] bg-[#1a1a1a] flex items-center justify-center shrink-0">
+                        <ImageIcon size={14} className="text-[#444]" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-bold text-[#f0f0f0] text-sm truncate group-hover:text-[#dc2626] transition-colors">{c.title}</p>
+                        {!c.isActive && <span className="text-[10px] text-orange-400 bg-orange-400/10 border border-orange-400/20 px-2 py-0.5 rounded font-bold uppercase shrink-0">Inactive</span>}
+                        {c.requiredTier > 1 && <span className="text-[10px] text-[#606060] bg-[#1a1a1a] border border-[#333] px-2 py-0.5 rounded font-rajdhani font-bold shrink-0">Tier {c.requiredTier}</span>}
+                      </div>
+                      <p className="text-[11px] text-[#444] font-mono">/{c.slug}</p>
+                      <p className="text-[11px] text-[#555]">{c._count?.courseEpisodes ?? 0} episode{c._count?.courseEpisodes !== 1 ? "s" : ""}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-all">
+                      <button onClick={e => { e.stopPropagation(); openEditCourse(c); }} className="p-1.5 text-[#444] hover:text-green-400 hover:bg-green-400/10 rounded transition-all"><Pencil size={14} /></button>
+                      <button onClick={e => { e.stopPropagation(); setDeletingCourse(c.id); }} className="p-1.5 text-[#444] hover:text-red-400 hover:bg-red-400/10 rounded transition-all"><Trash2 size={14} /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {selectedCourse && (
+            <EpisodesPanel
+              course={selectedCourse}
+              onClose={() => setSelectedCourse(null)}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Course form modal */}
+      {showCourseForm && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-[#141414] border border-[#2a2a2a] w-full max-w-md rounded-2xl overflow-hidden shadow-2xl">
+            <div className="px-6 py-5 border-b border-[#2a2a2a] flex justify-between items-center bg-[#1a1a1a]">
+              <h3 className="font-rajdhani font-bold uppercase tracking-widest text-[#f0f0f0]">{editingCourse ? "Edit Course" : "New Course"}</h3>
+              <button onClick={() => setShowCourseForm(false)} className="text-[#606060] hover:text-white"><X size={18} /></button>
+            </div>
+            <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+              <div>
+                <label className="block text-[11px] font-bold text-[#606060] uppercase tracking-widest mb-2 font-rajdhani">Title *</label>
+                <input value={courseForm.title}
+                  onChange={e => { setCourseField("title", e.target.value); if (!editingCourse) setCourseField("slug", toSlug(e.target.value)); }}
+                  className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg h-11 px-4 text-white outline-none focus:border-[#dc2626] transition-all text-sm" />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-[#606060] uppercase tracking-widest mb-2 font-rajdhani">Slug (auto-generated)</label>
+                <input value={courseForm.slug} onChange={e => setCourseField("slug", e.target.value)} placeholder="my-course"
+                  className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg h-11 px-4 text-white outline-none focus:border-[#dc2626] transition-all text-sm font-mono" />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-[#606060] uppercase tracking-widest mb-2 font-rajdhani">Description</label>
+                <textarea value={courseForm.description} onChange={e => setCourseField("description", e.target.value)} rows={3}
+                  className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-4 py-3 text-white outline-none focus:border-[#dc2626] transition-all text-sm resize-none" />
+              </div>
+
+              {/* Thumbnail upload */}
+              <FileUploadBtn
+                label="Thumbnail"
+                value={courseForm.thumbnailUrl}
+                accept="image/png,image/jpeg,image/webp"
+                bucket="courses"
+                pathPrefix="thumbnails"
+                uploadKey="courseThumbnail"
+                uploading={courseUploading}
+                setUploading={setCourseUploading}
+                onUploaded={url => setCourseField("thumbnailUrl", url)}
+              />
+
+              <div>
+                <label className="block text-[11px] font-bold text-[#606060] uppercase tracking-widest mb-2 font-rajdhani">Required Tier</label>
+                <input type="number" min="1" value={courseForm.requiredTier} onChange={e => setCourseField("requiredTier", e.target.value)}
+                  className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg h-11 px-4 text-white outline-none focus:border-[#dc2626] transition-all text-sm" />
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button type="button" onClick={() => setCourseField("isActive", !courseForm.isActive)}
+                  className={`w-10 h-5 rounded-full relative transition-all ${courseForm.isActive ? "bg-[#dc2626]" : "bg-[#333]"}`}>
+                  <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all ${courseForm.isActive ? "right-0.5" : "left-0.5"}`} />
+                </button>
+                <span className="text-[12px] text-[#a0a0a0] font-rajdhani">Active</span>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-[#2a2a2a] bg-[#1a1a1a] flex justify-end gap-3">
+              <button onClick={() => setShowCourseForm(false)} className="px-6 py-2 text-[#606060] hover:text-white font-rajdhani font-bold text-[12px] uppercase tracking-widest">Cancel</button>
+              <button onClick={handleSaveCourse} disabled={createCourse.isPending || updateCourse.isPending || !!courseUploading}
+                className="bg-[#dc2626] hover:bg-red-700 text-white px-8 py-2 rounded-md font-rajdhani font-bold text-[12px] uppercase tracking-widest flex items-center gap-2 disabled:opacity-60">
+                {(createCourse.isPending || updateCourse.isPending) && <Loader2 size={14} className="animate-spin" />} Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete course confirm */}
+      {deletingCourse && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[250] flex items-center justify-center p-4">
+          <div className="bg-[#141414] border border-[#2a2a2a] w-full max-w-sm rounded-2xl p-8 text-center shadow-2xl">
+            <AlertCircle className="text-red-500 mx-auto mb-4" size={36} />
+            <h3 className="font-rajdhani font-bold uppercase tracking-widest text-[#f0f0f0] mb-2">Delete Course?</h3>
+            <p className="text-[#606060] text-xs mb-6">All episodes will be removed.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeletingCourse(null)} className="flex-1 py-2.5 bg-[#1a1a1a] border border-[#333] rounded-lg text-[#a0a0a0] font-rajdhani font-bold text-[12px] uppercase tracking-widest hover:text-white transition-all">Cancel</button>
+              <button onClick={() => handleDeleteCourse(deletingCourse)} disabled={deleteCourse.isPending}
+                className="flex-1 py-2.5 bg-[#dc2626] hover:bg-red-700 text-white rounded-lg font-rajdhani font-bold text-[12px] uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-60">
+                {deleteCourse.isPending && <Loader2 size={13} className="animate-spin" />} Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </DashboardLayout>
   );
 }
 
-const Input = ({ error, ...props }: any) => (
-  <div>
-    <input 
-       {...props}
-       className={cn(
-         "w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-[8px] h-[48px] px-4 text-white placeholder-[#555] outline-none transition-all",
-         error ? "border-[#dc2626]" : "focus:border-[#dc2626]"
-       )}
-    />
-    {error && <p className="text-[12px] text-[#dc2626] mt-1 uppercase font-bold tracking-wider">{error}</p>}
-  </div>
-);
+// ── Episodes Panel ────────────────────────────────────────────────────
+function EpisodesPanel({ course, onClose }: { course: any; onClose: () => void }) {
+  const { data, isLoading } = useListCourseEpisodes(course.id);
+  const createEp = useCreateCourseEpisode(course.id);
+  const updateEp = useUpdateCourseEpisode(course.id);
+  const deleteEp = useDeleteCourseEpisode(course.id);
+  const reorderEp = useReorderCourseEpisodes(course.id);
 
-function formatTime(date: Date) {
-  let hours = date.getHours();
-  const minutes = date.getMinutes();
-  const ampm = hours >= 12 ? 'PM' : 'AM';
-  hours = hours % 12;
-  hours = hours ? hours : 12; 
-  const strTime = hours + ':' + (minutes < 10 ? '0' + minutes : minutes) + ' ' + ampm;
-  return strTime;
+  const serverEps: any[] = (data as any)?.data || [];
+  const [localEps, setLocalEps] = useState<any[]>([]);
+  const [isDirty, setIsDirty] = useState(false);
+
+  useEffect(() => { setLocalEps(serverEps); setIsDirty(false); }, [data]);
+
+  const [showForm, setShowForm] = useState(false);
+  const [editingEp, setEditingEp] = useState<any>(null);
+  const [epForm, setEpForm] = useState<any>(EMPTY_EP);
+  const [deletingEp, setDeletingEp] = useState<string | null>(null);
+  const [epUploading, setEpUploading] = useState<string | null>(null);
+
+  const setEpField = (k: string, v: any) => setEpForm((f: any) => ({ ...f, [k]: v }));
+
+  // DnD
+  const dragIdx = useRef<number | null>(null);
+  const [dragOver, setDragOver] = useState<number | null>(null);
+
+  const onDragStart = (i: number) => { dragIdx.current = i; };
+  const onDragOver = (e: React.DragEvent, i: number) => { e.preventDefault(); setDragOver(i); };
+  const onDrop = (e: React.DragEvent, dropIdx: number) => {
+    e.preventDefault();
+    const from = dragIdx.current;
+    if (from === null || from === dropIdx) { setDragOver(null); return; }
+    const next = [...localEps];
+    const [moved] = next.splice(from, 1);
+    next.splice(dropIdx, 0, moved);
+    setLocalEps(next);
+    setIsDirty(true);
+    dragIdx.current = null;
+    setDragOver(null);
+  };
+  const onDragEnd = () => { dragIdx.current = null; setDragOver(null); };
+
+  const handleSaveOrder = async () => {
+    try { await reorderEp.mutateAsync(localEps.map((ep: any) => ep.id)); setIsDirty(false); toast.success("Order saved"); }
+    catch (e: any) { toast.error(e.message || "Failed"); }
+  };
+
+  // Duration auto-detect from video file
+  const detectDuration = (file: File): Promise<number> =>
+    new Promise(resolve => {
+      const video = document.createElement("video");
+      video.preload = "metadata";
+      const url = URL.createObjectURL(file);
+      video.onloadedmetadata = () => { URL.revokeObjectURL(url); resolve(Math.round(video.duration)); };
+      video.onerror = () => { URL.revokeObjectURL(url); resolve(0); };
+      video.src = url;
+    });
+
+  const openCreate = () => { setEpForm(EMPTY_EP); setEditingEp(null); setShowForm(true); };
+  const openEdit = (ep: any) => {
+    setEpForm({ title: ep.title, videoUrl: ep.videoUrl, thumbnailUrl: ep.thumbnailUrl || "", durationSeconds: String(ep.durationSeconds || ""), isVisible: ep.isVisible });
+    setEditingEp(ep); setShowForm(true);
+  };
+
+  const handleSaveEp = async () => {
+    if (!epForm.title.trim() || !epForm.videoUrl.trim()) return toast.error("Title and video are required");
+    const payload = { ...epForm, durationSeconds: Number(epForm.durationSeconds) || 0 };
+    try {
+      if (editingEp) { await updateEp.mutateAsync({ id: editingEp.id, data: payload }); toast.success("Episode updated"); }
+      else { await createEp.mutateAsync(payload); toast.success("Episode created"); }
+      setShowForm(false);
+    } catch (e: any) { toast.error(e.message || "Failed"); }
+  };
+
+  const handleDeleteEp = async (id: string) => {
+    try { await deleteEp.mutateAsync(id); toast.success("Episode deleted"); setDeletingEp(null); }
+    catch (e: any) { toast.error(e.message || "Failed"); }
+  };
+
+  const getPresignedUrl = useGetPresignedUrl();
+  const createBunnyVideo = useCreateBunnyVideo();
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+
+  const handleVideoUpload = async (file: File) => {
+    try {
+      setEpUploading("video");
+      setUploadProgress(0);
+      // auto-detect duration from local file before upload
+      const secs = await detectDuration(file);
+      if (secs > 0) setEpField("durationSeconds", String(secs));
+
+      // Create video entry in Bunny Stream — get TUS credentials
+      const { tusUploadUrl, tusHeaders, embedUrl } = await createBunnyVideo.mutateAsync({
+        title: epForm.title || file.name,
+      });
+
+      // Upload directly to Bunny Stream via TUS — no backend proxy
+      const { Upload } = await import("tus-js-client");
+      await new Promise<void>((resolve, reject) => {
+        const upload = new Upload(file, {
+          endpoint: tusUploadUrl,
+          headers: {
+            AuthorizationSignature: tusHeaders.AuthorizationSignature,
+            AuthorizationExpire: String(tusHeaders.AuthorizationExpire),
+            VideoId: tusHeaders.VideoId,
+            LibraryId: tusHeaders.LibraryId,
+          },
+          chunkSize: 5 * 1024 * 1024,
+          retryDelays: [0, 3000, 5000, 10000],
+          metadata: { filetype: file.type, title: epForm.title || file.name },
+          onProgress(bytesUploaded: number, bytesTotal: number) {
+            setUploadProgress(Math.round((bytesUploaded / bytesTotal) * 100));
+          },
+          onSuccess() { resolve(); },
+          onError(err: any) { reject(err); },
+        });
+        upload.start();
+      });
+
+      setEpField("videoUrl", embedUrl);
+      toast.success("Video uploaded to Bunny Stream");
+    } catch (e: any) {
+      toast.error(e.message || "Upload failed");
+    } finally {
+      setEpUploading(null);
+      setUploadProgress(0);
+    }
+  };
+
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const thumbInputRef = useRef<HTMLInputElement>(null);
+
+  const handleThumbUpload = async (file: File) => {
+    try {
+      setEpUploading("thumb");
+      const { uploadUrl, publicUrl } = await getPresignedUrl.mutateAsync({
+        filename: file.name, contentType: file.type, bucket: "course-videos", pathPrefix: "episode-thumbs",
+      });
+      await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      setEpField("thumbnailUrl", publicUrl);
+      toast.success("Thumbnail uploaded");
+    } catch (e: any) { toast.error(e.message || "Upload failed"); }
+    finally { setEpUploading(null); }
+  };
+
+  const fmtDuration = (secs: number) => {
+    if (!secs) return "—";
+    const m = Math.floor(secs / 60), s = secs % 60;
+    return `${m}:${String(s).padStart(2, "0")}`;
+  };
+
+  return (
+    <div className="bg-[#181818] border border-[#2a2a2a] rounded-xl overflow-hidden flex flex-col" style={{ maxHeight: "78vh" }}>
+      {/* Panel header */}
+      <div className="p-4 border-b border-[#2a2a2a] bg-[#1a1a1a]/50 flex items-center justify-between shrink-0">
+        <div className="min-w-0">
+          <p className="text-[10px] text-[#606060] uppercase font-bold tracking-wider font-rajdhani">Episodes</p>
+          <p className="text-sm font-bold text-[#f0f0f0] truncate">{course.title}</p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {isDirty && (
+            <button onClick={handleSaveOrder} disabled={reorderEp.isPending}
+              className="flex items-center gap-1 bg-[#dc2626]/20 border border-[#dc2626]/40 text-[#dc2626] px-2 py-1 rounded text-[10px] font-bold uppercase tracking-widest font-rajdhani hover:bg-[#dc2626]/30 transition-all">
+              {reorderEp.isPending ? <Loader2 size={9} className="animate-spin" /> : <Save size={9} />} Save Order
+            </button>
+          )}
+          <button onClick={openCreate}
+            className="flex items-center gap-1 bg-[#dc2626] text-white px-3 py-1.5 rounded font-rajdhani font-bold text-[11px] tracking-widest uppercase hover:bg-red-700 transition-all">
+            <Plus size={12} /> Add
+          </button>
+          <button onClick={onClose} className="text-[#606060] hover:text-white p-1 transition-colors"><X size={16} /></button>
+        </div>
+      </div>
+
+      {/* Episode list */}
+      <div className="flex-1 overflow-y-auto">
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12"><Loader2 size={24} className="animate-spin text-[#dc2626]" /></div>
+        ) : localEps.length === 0 ? (
+          <div className="text-center py-12 space-y-2">
+            <Film size={28} className="mx-auto text-[#333]" />
+            <p className="text-[#606060] font-rajdhani font-bold uppercase tracking-widest text-xs">No episodes yet</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-[#222]">
+            {localEps.map((ep: any, i: number) => (
+              <div key={ep.id} draggable
+                onDragStart={() => onDragStart(i)}
+                onDragOver={e => onDragOver(e, i)}
+                onDrop={e => onDrop(e, i)}
+                onDragEnd={onDragEnd}
+                className={`flex items-center gap-3 px-4 py-3 select-none transition-all group
+                  ${dragOver === i ? "bg-[#dc2626]/10 border-t-2 border-[#dc2626]" : "hover:bg-white/[0.02]"}
+                  ${dragIdx.current === i ? "opacity-30" : ""}`}>
+                <GripVertical size={13} className="text-[#333] cursor-grab shrink-0" />
+                <span className="text-[10px] text-[#444] font-mono w-4 shrink-0">{i + 1}</span>
+                {ep.thumbnailUrl && (
+                  <img src={ep.thumbnailUrl} alt="" className="w-10 h-7 object-cover rounded border border-[#333] shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-medium text-[#f0f0f0] truncate">{ep.title}</p>
+                  <p className="text-[10px] text-[#555]">{fmtDuration(ep.durationSeconds)}</p>
+                </div>
+                {!ep.isVisible && <EyeOff size={11} className="text-[#555] shrink-0" />}
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all shrink-0">
+                  <button onClick={() => openEdit(ep)} className="p-1 text-[#444] hover:text-green-400 rounded transition-all"><Pencil size={12} /></button>
+                  <button onClick={() => setDeletingEp(ep.id)} className="p-1 text-[#444] hover:text-red-400 rounded transition-all"><Trash2 size={12} /></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Inline episode form */}
+      {showForm && (
+        <div className="border-t border-[#2a2a2a] p-4 bg-[#141414] space-y-3 shrink-0 overflow-y-auto max-h-[55vh]">
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] font-bold text-[#606060] uppercase tracking-widest font-rajdhani">{editingEp ? "Edit Episode" : "New Episode"}</p>
+            <button onClick={() => setShowForm(false)} className="text-[#444] hover:text-white transition-colors"><X size={14} /></button>
+          </div>
+
+          {/* Title */}
+          <div>
+            <label className="block text-[10px] font-bold text-[#606060] uppercase tracking-widest mb-1 font-rajdhani">Title *</label>
+            <input value={epForm.title} onChange={e => setEpField("title", e.target.value)}
+              className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded h-9 px-3 text-white outline-none focus:border-[#dc2626] text-xs" />
+          </div>
+
+          {/* Video upload */}
+          <div>
+            <label className="block text-[10px] font-bold text-[#606060] uppercase tracking-widest mb-1 font-rajdhani">Video *</label>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => videoInputRef.current?.click()} disabled={epUploading === "video"}
+                className="flex items-center gap-1.5 bg-[#1a1a1a] border border-[#2a2a2a] text-[#a0a0a0] px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest font-rajdhani hover:border-[#dc2626] transition-all disabled:opacity-50">
+                {epUploading === "video" ? <Loader2 size={10} className="animate-spin" /> : <Upload size={10} />}
+                {epUploading === "video"
+                  ? uploadProgress > 0 ? `${uploadProgress}%` : "Preparing..."
+                  : "Upload to Bunny"}
+              </button>
+              {epForm.videoUrl && (
+                <span className={`text-[10px] font-mono truncate max-w-[160px] ${epForm.videoUrl.includes("iframe.mediadelivery.net") ? "text-green-500" : "text-[#555]"}`}>
+                  {epForm.videoUrl.includes("iframe.mediadelivery.net") ? "Bunny Stream" : epForm.videoUrl.split("/").pop()}
+                </span>
+              )}
+            </div>
+            <input ref={videoInputRef} type="file" accept="video/mp4,video/webm,video/mov" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleVideoUpload(f); e.target.value = ""; }} />
+          </div>
+
+          {/* Thumbnail upload */}
+          <div>
+            <label className="block text-[10px] font-bold text-[#606060] uppercase tracking-widest mb-1 font-rajdhani">Thumbnail <span className="text-[#444] normal-case tracking-normal">(optional)</span></label>
+            <div className="flex items-center gap-2">
+              {epForm.thumbnailUrl && <img src={epForm.thumbnailUrl} alt="" className="w-10 h-7 object-cover rounded border border-[#333]" />}
+              <button type="button" onClick={() => thumbInputRef.current?.click()} disabled={epUploading === "thumb"}
+                className="flex items-center gap-1.5 bg-[#1a1a1a] border border-[#2a2a2a] text-[#a0a0a0] px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest font-rajdhani hover:border-[#dc2626] transition-all disabled:opacity-50">
+                {epUploading === "thumb" ? <Loader2 size={10} className="animate-spin" /> : <ImageIcon size={10} />}
+                {epUploading === "thumb" ? "Uploading..." : epForm.thumbnailUrl ? "Replace" : "Upload"}
+              </button>
+            </div>
+            <input ref={thumbInputRef} type="file" accept="image/*" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleThumbUpload(f); e.target.value = ""; }} />
+          </div>
+
+          {/* Duration — auto-filled on video upload, manual override */}
+          <div>
+            <label className="block text-[10px] font-bold text-[#606060] uppercase tracking-widest mb-1 font-rajdhani">
+              Duration (seconds) <span className="text-[#444] normal-case tracking-normal">— auto-detected on upload</span>
+            </label>
+            <input type="number" min="0" value={epForm.durationSeconds} onChange={e => setEpField("durationSeconds", e.target.value)}
+              className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded h-9 px-3 text-white outline-none focus:border-[#dc2626] text-xs" />
+          </div>
+
+          {/* Visible */}
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setEpField("isVisible", !epForm.isVisible)}
+              className={`w-8 h-4 rounded-full relative transition-all ${epForm.isVisible ? "bg-[#dc2626]" : "bg-[#333]"}`}>
+              <span className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${epForm.isVisible ? "right-0.5" : "left-0.5"}`} />
+            </button>
+            <span className="text-[11px] text-[#a0a0a0] font-rajdhani flex items-center gap-1">
+              {epForm.isVisible ? <Eye size={11} /> : <EyeOff size={11} />} {epForm.isVisible ? "Visible" : "Hidden"}
+            </span>
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <button onClick={() => setShowForm(false)} className="flex-1 py-2 text-[#606060] hover:text-white font-rajdhani font-bold text-[11px] uppercase tracking-widest border border-[#2a2a2a] rounded transition-all">Cancel</button>
+            <button onClick={handleSaveEp} disabled={createEp.isPending || updateEp.isPending || !!epUploading}
+              className="flex-1 py-2 bg-[#dc2626] hover:bg-red-700 text-white font-rajdhani font-bold text-[11px] uppercase tracking-widest rounded flex items-center justify-center gap-1 disabled:opacity-60">
+              {(createEp.isPending || updateEp.isPending) && <Loader2 size={11} className="animate-spin" />} Save
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete ep confirm */}
+      {deletingEp && (
+        <div className="fixed inset-0 bg-black/80 z-[300] flex items-center justify-center p-4">
+          <div className="bg-[#141414] border border-[#2a2a2a] w-full max-w-xs rounded-xl p-6 text-center shadow-2xl">
+            <AlertCircle className="text-red-500 mx-auto mb-3" size={28} />
+            <p className="font-rajdhani font-bold uppercase text-[#f0f0f0] mb-4">Delete this episode?</p>
+            <div className="flex gap-2">
+              <button onClick={() => setDeletingEp(null)} className="flex-1 py-2 bg-[#1a1a1a] border border-[#333] rounded text-[#a0a0a0] font-rajdhani font-bold text-[11px] uppercase">Cancel</button>
+              <button onClick={() => handleDeleteEp(deletingEp)} disabled={deleteEp.isPending}
+                className="flex-1 py-2 bg-[#dc2626] rounded text-white font-rajdhani font-bold text-[11px] uppercase flex items-center justify-center gap-1 disabled:opacity-60">
+                {deleteEp.isPending && <Loader2 size={11} className="animate-spin" />} Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }

@@ -47,21 +47,43 @@ export async function listMembersHandler(request: FastifyRequest, reply: Fastify
 export async function createMemberHandler(request: FastifyRequest, reply: FastifyReply) {
   try {
     const body = createMemberSchema.parse(request.body);
-    
+
     // Check email uniqueness
     const existingEmail = await request.server.prisma.member.findUnique({ where: { email: body.email } });
     if (existingEmail) {
       return reply.status(409).send({ success: false, error: { code: 'CONFLICT', message: 'Email already exists' } });
     }
 
-    const { 
-      dob, 
-      businessEstablishedOn, 
-      accountManagerId, 
+    const {
+      dob,
+      businessEstablishedOn,
+      accountManagerId,
       batchId,
       createdBy,
-      ...restBody 
+      password,
+      ...restBody
     } = body;
+
+    // Create Clerk user if a password was provided
+    let clerkId: string | undefined;
+    if (password) {
+      try {
+        const baseUsername = body.email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_');
+        const suffix = Math.floor(100 + Math.random() * 900);
+        const username = `${baseUsername}_${suffix}`;
+        const clerkUser = await request.server.clerk.users.createUser({
+          emailAddress: [body.email],
+          password,
+          username,
+          firstName: body.firstName,
+          lastName: body.lastName || undefined,
+        });
+        clerkId = clerkUser.id;
+      } catch (clerkErr: any) {
+        const msg = clerkErr.errors?.[0]?.longMessage || clerkErr.message || 'Failed to create auth account';
+        return reply.status(400).send({ success: false, error: { code: 'AUTH_FAILED', message: msg } });
+      }
+    }
 
     const data: any = {
       ...restBody,
@@ -69,12 +91,13 @@ export async function createMemberHandler(request: FastifyRequest, reply: Fastif
       businessEstablishedOn: businessEstablishedOn ? new Date(businessEstablishedOn) : null,
       marketingChannels: body.marketingChannels || [],
       currentChallenges: body.currentChallenges || [],
+      ...(clerkId && { clerkId }),
     };
 
     if (accountManagerId) {
       data.accountManager = { connect: { id: accountManagerId } };
     }
-    
+
     if (batchId) {
       data.batch = { connect: { id: batchId } };
     }
@@ -88,16 +111,23 @@ export async function createMemberHandler(request: FastifyRequest, reply: Fastif
       data.memberId = `TBT-${Math.floor(1000 + Math.random() * 9000)}`;
     }
 
-    const member = await request.server.prisma.member.create({
-      data
-    });
+    let member;
+    try {
+      member = await request.server.prisma.member.create({ data });
+    } catch (prismaErr: any) {
+      // Roll back the Clerk user if DB insert fails
+      if (clerkId) {
+        await request.server.clerk.users.deleteUser(clerkId).catch(() => {});
+      }
+      throw prismaErr;
+    }
 
     return reply.status(201).send({ success: true, data: member, error: null });
   } catch (err: any) {
     if (err.name === 'ZodError') {
-      return reply.status(400).send({ 
-        success: false, 
-        error: { code: 'VALIDATION_ERROR', message: 'Validation failed', fields: err.flatten().fieldErrors } 
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'Validation failed', fields: err.flatten().fieldErrors }
       });
     }
     request.server.log.error({ err }, 'Failed to create member');
@@ -125,14 +155,53 @@ export async function updateMemberHandler(request: FastifyRequest, reply: Fastif
     const { id } = request.params as { id: string };
     const body = updateMemberSchema.parse(request.body);
 
-    const { 
-      dob, 
-      businessEstablishedOn, 
-      accountManagerId, 
+    const {
+      dob,
+      businessEstablishedOn,
+      accountManagerId,
       batchId,
       createdBy,
-      ...restBody 
+      password,
+      ...restBody
     } = body as any;
+
+    // Handle password update via Clerk
+    if (password && password.trim() !== '') {
+      const currentMember = await request.server.prisma.member.findUnique({
+        where: { id },
+        select: { email: true, firstName: true, lastName: true, clerkId: true }
+      });
+      if (!currentMember) {
+        return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Member not found' } });
+      }
+
+      if ((currentMember as any).clerkId) {
+        try {
+          await request.server.clerk.users.updateUser((currentMember as any).clerkId, { password });
+        } catch (clerkErr: any) {
+          const msg = clerkErr.errors?.[0]?.longMessage || clerkErr.message || 'Failed to update auth account';
+          return reply.status(400).send({ success: false, error: { code: 'AUTH_FAILED', message: msg } });
+        }
+      } else {
+        // Member has no Clerk account yet — create one and link it
+        try {
+          const baseUsername = currentMember.email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_');
+          const suffix = Math.floor(100 + Math.random() * 900);
+          const username = `${baseUsername}_${suffix}`;
+          const clerkUser = await request.server.clerk.users.createUser({
+            emailAddress: [currentMember.email],
+            password,
+            username,
+            firstName: currentMember.firstName,
+            lastName: currentMember.lastName || undefined,
+          });
+          restBody.clerkId = clerkUser.id;
+        } catch (clerkErr: any) {
+          const msg = clerkErr.errors?.[0]?.longMessage || clerkErr.message || 'Failed to create auth account';
+          return reply.status(400).send({ success: false, error: { code: 'AUTH_FAILED', message: msg } });
+        }
+      }
+    }
 
     const data: any = {};
 
@@ -284,4 +353,140 @@ export async function createManagerHandler(request: FastifyRequest, reply: Fasti
     request.server.log.error(err);
     return reply.status(500).send({ success: false, error: { code: 'INTERNAL_SERVER_ERROR', message: err.message || 'Something went wrong' } });
   }
+}
+
+
+export async function getMemberProgressHandler(req: FastifyRequest, reply: FastifyReply) {
+  const { id } = req.params as any;
+  const enrollments = await req.server.prisma.workshopEnrollment.findMany({
+    where: { memberId: id },
+    include: {
+      workshop: {
+        include: {
+          challenges: {
+            orderBy: { order: 'asc' },
+            include: {
+              episodes: { include: { progress: { where: { memberId: id } } } },
+              assignments: { include: { submissions: { where: { memberId: id } } } },
+            },
+          },
+        },
+      },
+    },
+    orderBy: { enrolledAt: 'desc' },
+  });
+
+  const workshops = enrollments.map(e => {
+    const challenges = e.workshop.challenges.map(c => {
+      const total = c.episodes.length;
+      const completed = c.episodes.filter(ep => ep.progress[0]?.isCompleted).length;
+      return {
+        title: c.title,
+        completedCount: completed,
+        totalCount: total,
+        percent: total > 0 ? Math.round((completed / total) * 100) : 0,
+      };
+    });
+    const totalEp = challenges.reduce((s, c) => s + c.totalCount, 0);
+    const completedEp = challenges.reduce((s, c) => s + c.completedCount, 0);
+    const lastActivity = e.workshop.challenges.flatMap(c =>
+      c.episodes.flatMap(ep => ep.progress.map(p => p.updatedAt))
+    ).sort((a, b) => (b as any) - (a as any))[0] || null;
+
+    return {
+      workshopId: e.workshopId,
+      workshopTitle: e.workshop.title,
+      status: e.status,
+      overallPercent: totalEp > 0 ? Math.round((completedEp / totalEp) * 100) : 0,
+      completedCount: completedEp,
+      totalCount: totalEp,
+      challenges,
+      assignments: e.workshop.challenges.flatMap(c =>
+        c.assignments.map(a => ({
+          title: a.title,
+          isSubmitted: a.submissions.length > 0,
+          submittedAt: a.submissions[0]?.submittedAt || null,
+        }))
+      ),
+      lastActiveAt: lastActivity,
+    };
+  });
+
+  return reply.send({ success: true, data: { workshops }, error: null });
+}
+
+// ── MEMBER BADGES ─────────────────────────────────────────────────────
+
+export async function listMemberBadgesHandler(req: FastifyRequest, reply: FastifyReply) {
+  const { id } = req.params as any;
+  const badges = await req.server.prisma.memberBadge.findMany({
+    where: { memberId: id },
+    include: { badge: { select: { id: true, name: true, description: true, iconUrl: true } } },
+    orderBy: { earnedAt: 'asc' },
+  });
+  return reply.send({ success: true, data: badges, error: null });
+}
+
+export async function listAllBadgesHandler(_req: FastifyRequest, reply: FastifyReply) {
+  const badges = await _req.server.prisma.badge.findMany({ orderBy: { name: 'asc' } });
+  return reply.send({ success: true, data: badges, error: null });
+}
+
+export async function assignBadgeHandler(req: FastifyRequest, reply: FastifyReply) {
+  const { id } = req.params as any;
+  const { badgeId } = req.body as any;
+  const existing = await req.server.prisma.memberBadge.findFirst({ where: { memberId: id, badgeId } });
+  if (existing) return reply.send({ success: true, data: existing, error: null });
+  const mb = await req.server.prisma.memberBadge.create({ data: { memberId: id, badgeId } });
+  return reply.status(201).send({ success: true, data: mb, error: null });
+}
+
+export async function removeBadgeHandler(req: FastifyRequest, reply: FastifyReply) {
+  const { id, badgeId } = req.params as any;
+  await req.server.prisma.memberBadge.deleteMany({ where: { memberId: id, badgeId } });
+  return reply.send({ success: true, data: null, error: null });
+}
+
+// ── MEMBER ENROLLMENTS ────────────────────────────────────────────────
+
+export async function listMemberEnrollmentsHandler(req: FastifyRequest, reply: FastifyReply) {
+  const { id } = req.params as any;
+  const enrollments = await req.server.prisma.workshopEnrollment.findMany({
+    where: { memberId: id },
+    include: {
+      workshop: { select: { id: true, title: true, thumbnailUrl: true, isActive: true, slug: true } },
+    },
+    orderBy: { enrolledAt: 'desc' },
+  });
+  return reply.send({ success: true, data: enrollments, error: null });
+}
+
+export async function enrollMemberInWorkshopHandler(req: FastifyRequest, reply: FastifyReply) {
+  const { id } = req.params as any;
+  const { workshopId } = req.body as any;
+  if (!workshopId) {
+    return reply.status(400).send({ success: false, error: { code: 'VALIDATION_ERROR', message: 'workshopId is required' } });
+  }
+  const workshop = await req.server.prisma.workshop.findUnique({ where: { id: workshopId } });
+  if (!workshop) {
+    return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Workshop not found' } });
+  }
+  const enrollment = await req.server.prisma.workshopEnrollment.upsert({
+    where: { workshopId_memberId: { workshopId, memberId: id } },
+    update: { status: 'active' },
+    create: { workshopId, memberId: id, status: 'active' },
+  });
+  return reply.status(201).send({ success: true, data: enrollment, error: null });
+}
+
+export async function removeMemberEnrollmentHandler(req: FastifyRequest, reply: FastifyReply) {
+  const { id, workshopId } = req.params as any;
+  try {
+    await req.server.prisma.workshopEnrollment.delete({
+      where: { workshopId_memberId: { workshopId, memberId: id } },
+    });
+  } catch {
+    return reply.status(404).send({ success: false, error: { code: 'NOT_FOUND', message: 'Enrollment not found' } });
+  }
+  return reply.send({ success: true, data: null, error: null });
 }

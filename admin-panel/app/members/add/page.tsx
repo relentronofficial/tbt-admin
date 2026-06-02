@@ -1,14 +1,15 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { 
-  Camera, 
-  UploadCloud, 
-  X, 
-  UserPlus, 
-  CheckCircle2, 
+import {
+  Camera,
+  UploadCloud,
+  X,
+  UserPlus,
   Loader2,
-  LogOut
+  LogOut,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useForm, Controller } from "react-hook-form";
@@ -59,6 +60,7 @@ const memberSchema = z.object({
   status: z.string().default("active"),
   verificationStatus: z.string().default("awaiting_kyc"),
   accountManagerId: z.string().optional(),
+  password: z.string().min(8, "Password must be at least 8 characters"),
 });
 
 type MemberInput = z.infer<typeof memberSchema>;
@@ -69,7 +71,8 @@ export default function AddMemberPage() {
   
   const [profileImage, setProfileImage] = useState<File | null>(null);
   const [profilePreview, setProfilePreview] = useState<string | null>(null);
-  
+  const [showPassword, setShowPassword] = useState(false);
+
   const [kycDoc, setKycDoc] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
@@ -484,17 +487,13 @@ export default function AddMemberPage() {
               <h2 className="text-[20px] font-bold text-white uppercase">ACCOUNT MANAGEMENT</h2>
               <p className="text-[13px] text-[#666] mt-1">Administrative controls and verification status.</p>
             </div>
-            
+
             <div className="p-8 pt-4 space-y-6">
+              {/* Row 1: Membership Plan | Password */}
               <div className="grid grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-[11px] font-[600] text-[#888] tracking-[0.05em] uppercase mb-2">Member ID</label>
-                  <input value={watchMemberId} readOnly className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-[8px] h-[44px] px-4 text-[#888] text-[14px] outline-none cursor-default font-mono" />
-                </div>
                 <div>
                   <label className="block text-[11px] font-[600] text-[#888] tracking-[0.05em] uppercase mb-2">Membership Plan</label>
                   <select {...register("membershipPlan")} className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-[8px] h-[44px] px-4 text-white placeholder-[#555] text-[14px] outline-none focus:border-[#dc2626] appearance-none cursor-pointer">
-                    <option value="" disabled>Select...</option>
                     <option value="free">Free</option>
                     <option value="starter">Starter</option>
                     <option value="premium">Premium</option>
@@ -502,8 +501,29 @@ export default function AddMemberPage() {
                     <option value="enterprise">Enterprise</option>
                   </select>
                 </div>
+                <div>
+                  <label className="block text-[11px] font-[600] text-[#888] tracking-[0.05em] uppercase mb-2">Password <span className="text-[#dc2626]">*</span></label>
+                  <div className="relative flex items-center bg-[#1a1a1a] border border-[#2a2a2a] rounded-[8px] h-[44px] overflow-hidden focus-within:border-[#dc2626]">
+                    <input
+                      {...register("password")}
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Min. 8 characters"
+                      className="w-full h-full bg-transparent px-4 pr-11 text-white placeholder-[#555] text-[14px] outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="absolute right-3 text-[#555] hover:text-white transition-colors"
+                      tabIndex={-1}
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  {errors.password && <p className="text-[12px] text-red-500 mt-1">{errors.password.message}</p>}
+                </div>
               </div>
 
+              {/* Row 2: Status | Verification Status */}
               <div className="grid grid-cols-2 gap-6">
                 <div>
                   <label className="block text-[11px] font-[600] text-[#888] tracking-[0.05em] uppercase mb-2">Status</label>
@@ -517,13 +537,16 @@ export default function AddMemberPage() {
                 </div>
                 <div>
                   <label className="block text-[11px] font-[600] text-[#888] tracking-[0.05em] uppercase mb-2">Verification Status</label>
-                  <div className="flex items-center gap-2 h-[44px]">
-                    <CheckCircle2 size={18} className="text-amber-500" />
-                    <span className="text-[14px] font-bold text-amber-500 tracking-wide uppercase">AWAITING KYC</span>
-                  </div>
+                  <select {...register("verificationStatus")} className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-[8px] h-[44px] px-4 text-white placeholder-[#555] text-[14px] outline-none focus:border-[#dc2626] appearance-none cursor-pointer">
+                    <option value="awaiting_kyc">Awaiting KYC</option>
+                    <option value="under_review">Under Review</option>
+                    <option value="verified">Verified</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
                 </div>
               </div>
 
+              {/* Row 3: Assign Account Manager */}
               <div className="grid grid-cols-2 gap-6">
                 <div>
                   <label className="block text-[11px] font-[600] text-[#888] tracking-[0.05em] uppercase mb-2">Assign Account Manager</label>
@@ -533,32 +556,6 @@ export default function AddMemberPage() {
                     value={watchAccountManagerId || ""}
                     onChange={(id) => setValue("accountManagerId", id, { shouldDirty: true })}
                   />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-[600] text-[#888] tracking-[0.05em] uppercase mb-2">Task</label>
-                  <select {...register("task")} className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-[8px] h-[44px] px-4 text-white placeholder-[#555] text-[14px] outline-none focus:border-[#dc2626] appearance-none cursor-pointer">
-                    <option value="" disabled>Select...</option>
-                    <option value="90 days Track">90 days Track</option>
-                    <option value="180 days Track">180 days Track</option>
-                    <option value="Annual Track">Annual Track</option>
-                    <option value="Custom">Custom</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-[11px] font-[600] text-[#888] tracking-[0.05em] uppercase mb-2">Assigned By</label>
-                  <select {...register("assignedById")} className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-[8px] h-[44px] px-4 text-white placeholder-[#555] text-[14px] outline-none focus:border-[#dc2626] appearance-none cursor-pointer">
-                    <option value="" disabled>Select...</option>
-                    {managers?.map((m: any) => <option key={m.id} value={m.id}>{m.fullName}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-[600] text-[#888] tracking-[0.05em] uppercase mb-2">Assigned At</label>
-                  <div className="flex items-center h-[44px] text-[#666] text-[14px] font-mono">
-                    -- Auto-generated on save --
-                  </div>
                 </div>
               </div>
 

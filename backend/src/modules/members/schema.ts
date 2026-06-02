@@ -40,6 +40,8 @@ export const createMemberSchema = z.object({
   accountManagerId: z.string().optional(),
   batchId: z.string().optional(),
   createdBy: z.string().optional(),
+  currentTier: z.number().int().min(1).optional(),
+  password: z.string().min(8, "Password must be at least 8 characters").optional(),
 });
 
 export const updateMemberSchema = createMemberSchema.partial();
