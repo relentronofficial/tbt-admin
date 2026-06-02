@@ -19,6 +19,20 @@ import {
   getUserNotificationsHandler,
   markNotificationReadHandler,
   markAllNotificationsReadHandler,
+  getHomeHeroHandler,
+  getHomeSectionsHandler,
+  getMyWorkshopsHandler,
+  getWorkshopDetailHandler,
+  getWorkshopFlowHandler,
+  getWorkshopQaHandler,
+  postWorkshopQaHandler,
+  postQaReplyHandler,
+  getWorkshopAssignmentsHandler,
+  submitAssignmentHandler,
+  getEpisodePlaybackHandler,
+  postEpisodeProgressHandler,
+  getUserProductsHandler,
+  getUserResourcesHandler,
 } from './controller.js';
 
 export async function userRoutes(fastify: FastifyInstance) {
@@ -57,4 +71,26 @@ export async function userRoutes(fastify: FastifyInstance) {
   fastify.get('/notifications', getUserNotificationsHandler);
   fastify.patch('/notifications/:id/read', markNotificationReadHandler);
   fastify.post('/notifications/read-all', markAllNotificationsReadHandler);
+
+  // ── Home ──────────────────────────────────────────────────────────────────
+  fastify.get('/home/hero', getHomeHeroHandler);
+  fastify.get('/home/sections', getHomeSectionsHandler);
+
+  // ── Workshops (user-facing) ───────────────────────────────────────────────
+  fastify.get('/workshops/my', getMyWorkshopsHandler);
+  fastify.get('/workshops/:slug/detail', getWorkshopDetailHandler);
+  fastify.get('/workshops/:slug/flow', getWorkshopFlowHandler);
+  fastify.get('/workshops/:slug/qa', getWorkshopQaHandler);
+  fastify.post('/workshops/:slug/qa', postWorkshopQaHandler);
+  fastify.post('/qa/:postId/reply', postQaReplyHandler);
+  fastify.get('/workshops/:slug/assignments', getWorkshopAssignmentsHandler);
+  fastify.post('/assignments/:id/submit', submitAssignmentHandler);
+
+  // ── Episodes ──────────────────────────────────────────────────────────────
+  fastify.get('/episodes/:id/playback', getEpisodePlaybackHandler);
+  fastify.post('/episodes/:id/progress', postEpisodeProgressHandler);
+
+  // ── Products & Resources ──────────────────────────────────────────────────
+  fastify.get('/products', getUserProductsHandler);
+  fastify.get('/resources', getUserResourcesHandler);
 }

@@ -336,7 +336,7 @@ export default function WorkshopDetailPage() {
   const [showEpisodeForm, setShowEpisodeForm] = useState(false);
   const [episodeChallengeId, setEpisodeChallengeId] = useState<string>("");
   const [editingEpisode, setEditingEpisode] = useState<any>(null);
-  const [episodeForm, setEpisodeForm] = useState({ title: "", type: "video", typeLabel: "", videoUrl: "", durationSeconds: "", lockIconType: "padlock", completedIconType: "checkmark" });
+  const [episodeForm, setEpisodeForm] = useState({ title: "", type: "video", typeLabel: "", videoUrl: "", bunnyVideoId: "", durationSeconds: "", lockIconType: "padlock", completedIconType: "checkmark" });
   const [deletingEpisode, setDeletingEpisode] = useState<string | null>(null);
   const epVideoInputRef = useRef<HTMLInputElement>(null);
   const [epVideoUploading, setEpVideoUploading] = useState(false);
@@ -345,12 +345,12 @@ export default function WorkshopDetailPage() {
 
   const openCreateEpisode = (challengeId: string) => {
     setEpisodeChallengeId(challengeId);
-    setEpisodeForm({ title: "", type: "video", typeLabel: "", videoUrl: "", durationSeconds: "", lockIconType: "padlock", completedIconType: "checkmark" });
+    setEpisodeForm({ title: "", type: "video", typeLabel: "", videoUrl: "", bunnyVideoId: "", durationSeconds: "", lockIconType: "padlock", completedIconType: "checkmark" });
     setEditingEpisode(null); setShowEpisodeForm(true);
   };
   const openEditEpisode = (ep: any, challengeId: string) => {
     setEpisodeChallengeId(challengeId);
-    setEpisodeForm({ title: ep.title, type: ep.type || "video", typeLabel: ep.typeLabel || "", videoUrl: ep.videoUrl || "", durationSeconds: ep.durationSeconds != null ? String(ep.durationSeconds) : "", lockIconType: ep.lockIconType || "padlock", completedIconType: ep.completedIconType || "checkmark" });
+    setEpisodeForm({ title: ep.title, type: ep.type || "video", typeLabel: ep.typeLabel || "", videoUrl: ep.videoUrl || "", bunnyVideoId: ep.bunnyVideoId || "", durationSeconds: ep.durationSeconds != null ? String(ep.durationSeconds) : "", lockIconType: ep.lockIconType || "padlock", completedIconType: ep.completedIconType || "checkmark" });
     setEditingEpisode(ep); setShowEpisodeForm(true);
   };
 
@@ -359,6 +359,7 @@ export default function WorkshopDetailPage() {
     try {
       const epData: any = { title: episodeForm.title, type: episodeForm.type, typeLabel: episodeForm.typeLabel || null, videoUrl: episodeForm.videoUrl || null, lockIconType: episodeForm.lockIconType, completedIconType: episodeForm.completedIconType };
       if (episodeForm.durationSeconds) epData.durationSeconds = Number(episodeForm.durationSeconds);
+      if (episodeForm.bunnyVideoId) epData.bunnyVideoId = episodeForm.bunnyVideoId;
       if (editingEpisode) { await updateEpisode.mutateAsync({ id: editingEpisode.id, data: epData }); toast.success("Episode updated"); }
       else { await createEpisode.mutateAsync({ challengeId: episodeChallengeId, data: epData }); toast.success("Episode created"); }
       setShowEpisodeForm(false); refetchChallenges();
@@ -375,7 +376,7 @@ export default function WorkshopDetailPage() {
       setEpVideoUploading(true);
       setEpUploadProgress(0);
       const titleForUpload = episodeForm.title || file.name;
-      const { tusUploadUrl, tusHeaders, embedUrl } = await createBunnyVideo.mutateAsync({
+      const { videoId, tusUploadUrl, tusHeaders, embedUrl } = await createBunnyVideo.mutateAsync({
         title: titleForUpload,
       });
       const { Upload: TusUpload } = await import("tus-js-client");
@@ -399,7 +400,7 @@ export default function WorkshopDetailPage() {
         });
         upload.start();
       });
-      setEpisodeForm(f => ({ ...f, videoUrl: embedUrl }));
+      setEpisodeForm(f => ({ ...f, videoUrl: embedUrl, bunnyVideoId: videoId }));
       toast.success("Video uploaded to Bunny Stream");
     } catch (e: any) {
       toast.error(e.message || "Upload failed");

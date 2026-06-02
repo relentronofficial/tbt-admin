@@ -17,7 +17,7 @@ import { toast } from "react-hot-toast";
 const toSlug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
 const EMPTY_COURSE = { title: "", slug: "", description: "", thumbnailUrl: "", requiredTier: "1", isActive: true };
-const EMPTY_EP = { title: "", videoUrl: "", thumbnailUrl: "", durationSeconds: "", isVisible: true };
+const EMPTY_EP = { title: "", videoUrl: "", bunnyVideoId: "", thumbnailUrl: "", durationSeconds: "", isVisible: true };
 
 // ── Single-file upload button ─────────────────────────────────────────
 function FileUploadBtn({
@@ -355,13 +355,13 @@ function EpisodesPanel({ course, onClose }: { course: any; onClose: () => void }
 
   const openCreate = () => { setEpForm(EMPTY_EP); setEditingEp(null); setShowForm(true); };
   const openEdit = (ep: any) => {
-    setEpForm({ title: ep.title, videoUrl: ep.videoUrl, thumbnailUrl: ep.thumbnailUrl || "", durationSeconds: String(ep.durationSeconds || ""), isVisible: ep.isVisible });
+    setEpForm({ title: ep.title, videoUrl: ep.videoUrl, bunnyVideoId: ep.bunnyVideoId || "", thumbnailUrl: ep.thumbnailUrl || "", durationSeconds: String(ep.durationSeconds || ""), isVisible: ep.isVisible });
     setEditingEp(ep); setShowForm(true);
   };
 
   const handleSaveEp = async () => {
     if (!epForm.title.trim() || !epForm.videoUrl.trim()) return toast.error("Title and video are required");
-    const payload = { ...epForm, durationSeconds: Number(epForm.durationSeconds) || 0 };
+    const payload = { ...epForm, durationSeconds: Number(epForm.durationSeconds) || 0, bunnyVideoId: epForm.bunnyVideoId || undefined };
     try {
       if (editingEp) { await updateEp.mutateAsync({ id: editingEp.id, data: payload }); toast.success("Episode updated"); }
       else { await createEp.mutateAsync(payload); toast.success("Episode created"); }
@@ -387,7 +387,7 @@ function EpisodesPanel({ course, onClose }: { course: any; onClose: () => void }
       if (secs > 0) setEpField("durationSeconds", String(secs));
 
       // Create video entry in Bunny Stream — get TUS credentials
-      const { tusUploadUrl, tusHeaders, embedUrl } = await createBunnyVideo.mutateAsync({
+      const { videoId, tusUploadUrl, tusHeaders, embedUrl } = await createBunnyVideo.mutateAsync({
         title: epForm.title || file.name,
       });
 
@@ -415,6 +415,7 @@ function EpisodesPanel({ course, onClose }: { course: any; onClose: () => void }
       });
 
       setEpField("videoUrl", embedUrl);
+      setEpField("bunnyVideoId", videoId);
       toast.success("Video uploaded to Bunny Stream");
     } catch (e: any) {
       toast.error(e.message || "Upload failed");

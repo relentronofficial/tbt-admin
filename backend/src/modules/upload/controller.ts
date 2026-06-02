@@ -90,6 +90,44 @@ export async function getPresignedUrlHandler(request: FastifyRequest, reply: Fas
   }
 }
 
+export async function deleteBunnyVideoHandler(request: FastifyRequest, reply: FastifyReply) {
+  const { videoId } = request.params as { videoId: string };
+
+  if (!env.BUNNY_STREAM_API_KEY || !env.BUNNY_STREAM_LIBRARY_ID) {
+    return reply.status(503).send({
+      success: false,
+      error: { code: 'SERVICE_UNAVAILABLE', message: 'Bunny Stream is not configured' },
+    });
+  }
+
+  try {
+    const res = await fetch(
+      `https://video.bunnycdn.com/library/${env.BUNNY_STREAM_LIBRARY_ID}/videos/${videoId}`,
+      {
+        method: 'DELETE',
+        headers: { AccessKey: env.BUNNY_STREAM_API_KEY },
+      },
+    );
+
+    if (!res.ok && res.status !== 404) {
+      const errText = await res.text();
+      request.server.log.error(`Bunny Stream delete video failed: ${errText}`);
+      return reply.status(502).send({
+        success: false,
+        error: { code: 'BUNNY_ERROR', message: 'Failed to delete video from Bunny Stream' },
+      });
+    }
+
+    return reply.send({ success: true, data: null, error: null });
+  } catch (err: any) {
+    request.server.log.error(err);
+    return reply.status(500).send({
+      success: false,
+      error: { code: 'BUNNY_ERROR', message: 'Bunny Stream request failed' },
+    });
+  }
+}
+
 export async function createBunnyVideoHandler(request: FastifyRequest, reply: FastifyReply) {
   const { title } = request.body as { title?: string };
 

@@ -267,6 +267,7 @@ export async function createEpisodeHandler(req: FastifyRequest, reply: FastifyRe
       type: body.type || 'video',
       typeLabel: body.typeLabel || 'Video',
       videoUrl: body.videoUrl,
+      bunnyVideoId: body.bunnyVideoId || null,
       durationSeconds: body.durationSeconds ? Number(body.durationSeconds) : null,
       durationLabel: body.durationLabel,
     },
@@ -278,7 +279,7 @@ export async function updateEpisodeHandler(req: FastifyRequest, reply: FastifyRe
   const { eid } = req.params as any;
   const body = req.body as any;
   const data: any = {};
-  ['order', 'title', 'type', 'typeLabel', 'videoUrl', 'durationLabel'].forEach(f => {
+  ['order', 'title', 'type', 'typeLabel', 'videoUrl', 'bunnyVideoId', 'durationLabel'].forEach(f => {
     if (body[f] !== undefined) data[f] = body[f];
   });
   if (body.durationSeconds !== undefined) data.durationSeconds = body.durationSeconds ? Number(body.durationSeconds) : null;

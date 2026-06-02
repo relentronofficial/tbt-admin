@@ -35,6 +35,7 @@ import { appResourceRoutes } from './modules/app-resources/routes.js';
 import { appNotificationRoutes } from './modules/app-notifications/routes.js';
 import { configRoutes } from './modules/config/routes.js';
 import { batchRoutes } from './modules/batches/routes.js';
+import { pubRoutes } from './modules/pub/routes.js';
 
 async function bootstrap() {
   const fastify = Fastify({
@@ -84,6 +85,7 @@ async function bootstrap() {
     await fastify.register(appNotificationRoutes, { prefix: '/api/app-notifications' });
     await fastify.register(configRoutes, { prefix: '/api/config' });
     await fastify.register(batchRoutes, { prefix: '/api/batches' });
+    await fastify.register(pubRoutes, { prefix: '/api/pub' });
 
     // Root + Health Check
     fastify.get('/', async () => ({ name: 'TBT Admin API', status: 'ok' }));

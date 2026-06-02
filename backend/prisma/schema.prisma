@@ -214,6 +214,7 @@ model Member {
   dob                   DateTime?          @db.Date
   gender                Gender?
   profilePhotoUrl       String?            @map("profile_photo_url")
+  avatarGradient        String?            @map("avatar_gradient")
   city                  String?
   state                 String?
   pincode               String?
@@ -1433,9 +1434,11 @@ model WorkshopEpisode {
   challengeId     String                  @map("challenge_id") @db.Uuid
   order           Int                     @default(0)
   title           String
+  description     String?
   type            String                  @default("video")
   typeLabel       String                  @default("Video") @map("type_label")
   videoUrl        String?                 @map("video_url")
+  bunnyVideoId    String?                 @map("bunny_video_id")
   durationSeconds Int?                    @map("duration_seconds")
   durationLabel   String?                 @map("duration_label")
   lockIconType    String                  @default("padlock") @map("lock_icon_type")
@@ -1635,9 +1638,13 @@ model SiteConfig {
   alertColor       String   @default("#ff3d8b") @map("alert_color")
   successColor     String   @default("#22c55e") @map("success_color")
   bgPrimary        String   @default("#000000") @map("bg_primary")
-  bgSurface        String   @default("#111111") @map("bg_surface")
-  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  bgSurface              String   @default("#111111") @map("bg_surface")
+  navShowNotifications   Boolean  @default(true) @map("nav_show_notifications")
+  navShowMessages        Boolean  @default(true) @map("nav_show_messages")
+  navShowProfile         Boolean  @default(true) @map("nav_show_profile")
+  heroAutoPlayIntervalMs Int      @default(5000) @map("hero_auto_play_interval_ms")
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("site_configs")
 }
@@ -1660,9 +1667,36 @@ model UiStrings {
   emailPlaceholder     String   @default("Enter your email") @map("email_placeholder")
   passwordLabel        String   @default("Password") @map("password_label")
   passwordPlaceholder  String   @default("Enter your password") @map("password_placeholder")
-  submitLabel          String   @default("Sign In") @map("submit_label")
-  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  submitLabel                    String   @default("Sign In") @map("submit_label")
+  profilePersonalLabel           String   @default("Personal Details") @map("profile_personal_label")
+  profileSubscriptionLabel       String   @default("Subscription") @map("profile_subscription_label")
+  profileTiersLabel              String   @default("Tier Access") @map("profile_tiers_label")
+  profileSignOutLabel            String   @default("Sign Out") @map("profile_sign_out_label")
+  profileSaveLabel               String   @default("Save Changes") @map("profile_save_label")
+  profileFirstNameLabel          String   @default("First Name") @map("profile_first_name_label")
+  profileLastNameLabel           String   @default("Last Name") @map("profile_last_name_label")
+  profileEmailLabel              String   @default("Email") @map("profile_email_label")
+  profilePhoneLabel              String   @default("Phone") @map("profile_phone_label")
+  profileDobLabel                String   @default("Date of Birth") @map("profile_dob_label")
+  profileSubStartLabel           String   @default("Start Date") @map("profile_sub_start_label")
+  profileSubEndLabel             String   @default("End Date") @map("profile_sub_end_label")
+  episodeCompleteLabel           String   @default("Mark Complete") @map("episode_complete_label")
+  playerAutoLabel                String   @default("Auto") @map("player_auto_label")
+  liveCallJoinLabel              String   @default("Join Call") @map("live_call_join_label")
+  watchBackLabel                 String   @default("Back") @map("watch_back_label")
+  assignmentCtaLabel             String   @default("Answer") @map("assignment_cta_label")
+  assignmentSubmitLabel          String   @default("Submit") @map("assignment_submit_label")
+  assignmentCancelLabel          String   @default("Cancel") @map("assignment_cancel_label")
+  notificationsPageTitle         String   @default("Notifications") @map("notifications_page_title")
+  notificationsUnreadSuffix      String   @default("unread") @map("notifications_unread_suffix")
+  notificationsMarkAllLabel      String   @default("Mark all read") @map("notifications_mark_all_label")
+  notificationsEmptyTitle        String   @default("No notifications yet") @map("notifications_empty_title")
+  notificationsEmptyDesc         String   @default("You'll be notified about events and updates.") @map("notifications_empty_desc")
+  resourcesDownloadLabel         String   @default("Download") @map("resources_download_label")
+  paginationPrevLabel            String   @default("Previous") @map("pagination_prev_label")
+  paginationNextLabel            String   @default("Next") @map("pagination_next_label")
+  createdAt                      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("ui_strings")
 }
@@ -1685,6 +1719,7 @@ model CourseEpisode {
   title           String
   thumbnailUrl    String?  @map("thumbnail_url")
   videoUrl        String   @map("video_url")
+  bunnyVideoId    String?  @map("bunny_video_id")
   durationSeconds Int      @default(0) @map("duration_seconds")
   order           Int      @default(0)
   isVisible       Boolean  @default(true) @map("is_visible")

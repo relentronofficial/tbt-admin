@@ -85,6 +85,7 @@ export async function createCourseEpisodeHandler(req: FastifyRequest, reply: Fas
       title: body.title,
       thumbnailUrl: body.thumbnailUrl || null,
       videoUrl: body.videoUrl,
+      bunnyVideoId: body.bunnyVideoId || null,
       durationSeconds: Number(body.durationSeconds) || 0,
       order: body.order ?? count,
       isVisible: body.isVisible ?? true,
@@ -97,7 +98,7 @@ export async function updateCourseEpisodeHandler(req: FastifyRequest, reply: Fas
   const { eid } = req.params as any;
   const body = req.body as any;
   const data: any = {};
-  ['title', 'thumbnailUrl', 'videoUrl', 'isVisible'].forEach(f => {
+  ['title', 'thumbnailUrl', 'videoUrl', 'bunnyVideoId', 'isVisible'].forEach(f => {
     if (body[f] !== undefined) data[f] = body[f];
   });
   if (body.durationSeconds !== undefined) data.durationSeconds = Number(body.durationSeconds) || 0;

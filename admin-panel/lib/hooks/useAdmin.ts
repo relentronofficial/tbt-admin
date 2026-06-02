@@ -180,3 +180,12 @@ export const useCreateBunnyVideo = () => {
     },
   });
 };
+
+export const useDeleteBunnyVideo = () => {
+  return useMutation({
+    mutationFn: async (videoId: string) => {
+      const res: any = await apiClient.delete(`/api/upload/bunny-video/${videoId}`);
+      return res.data || res;
+    },
+  });
+};
