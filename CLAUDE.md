@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**TBT Admin Platform** — monorepo for the Tamil Business Tribe LMS. The workspace root is `tbt-admin/`. The EiFlix Admin PRD (`F:\admin\EiFlix_Admin_PRD.md`) defines an 18-section implementation roadmap that is being built incrementally. Sessions 1–8 are complete; sessions 9–18 are pending.
+**TBT Admin Platform** — monorepo for the Tamil Business Tribe LMS. The workspace root is `tbt-admin/`. The TBT Admin PRD (`F:\admin\TBT_Admin_PRD.md`) defines an 18-section implementation roadmap that is being built incrementally. Sessions 1–8 are complete; sessions 9–18 are pending.
 
 ```
 tbt-admin/
@@ -57,7 +57,7 @@ Clerk is the auth provider for both frontend and backend.
 
 ### Frontend Structure
 - **API client:** `admin-panel/lib/api/apiClient.ts` — Axios pointing to `NEXT_PUBLIC_API_URL` (default `http://localhost:8000`). Response interceptor unwraps `response.data`.
-- **EiFlix hooks:** `admin-panel/lib/hooks/useTbt.ts` — all TanStack Query hooks for workshops, hero, content sections, courses, config, nav, tiers, badges, notifications, products, resources, batches
+- **TBT hooks:** `admin-panel/lib/hooks/useTbt.ts` — all TanStack Query hooks for workshops, hero, content sections, courses, config, nav, tiers, badges, notifications, products, resources, batches
 - **Admin hooks:** `admin-panel/lib/hooks/useAdmin.ts` — admins, members, file uploads (`useGetPresignedUrl`)
 - **Layout:** `DashboardLayout` wraps authenticated pages with `Sidebar` + `Topbar`; fixed sidebar 220px
 
@@ -163,7 +163,7 @@ Required: `DATABASE_URL`, `DIRECT_URL`, Supabase keys, Clerk keys (frontend + ba
 - **Frontend → Vercel** — auto-deploy on push to `main`
 
 ## PRD Reference
-Full PRD: `F:\admin\EiFlix_Admin_PRD.md`
+Full PRD: `F:\admin\TBT_Admin_PRD.md`
 Status tracker: `F:\admin\tbt-admin\PROJECT_STATUS.md`
 Pending tasks: `F:\admin\tbt-admin\PENDING_TASKS.md`
 Architecture detail: `F:\admin\tbt-admin\ARCHITECTURE.md`

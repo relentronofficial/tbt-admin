@@ -1,7 +1,7 @@
 # PROJECT_STATUS.md
 
 Last updated: 2026-06-02
-PRD source: `F:\admin\EiFlix_Admin_PRD.md`
+PRD source: `F:\admin\TBT_Admin_PRD.md`
 
 ---
 
@@ -23,10 +23,10 @@ PRD source: `F:\admin\EiFlix_Admin_PRD.md`
 | 3.12 | Q&A Moderation | `/workshops/:id` (Q&A tab) | ✅ DONE (embedded in detail page) |
 | 3.13 | Tiers | `/tiers` | ✅ DONE (pre-existing page) |
 | 3.14 | Badges | `/display-badges` | ✅ DONE (pre-existing page) |
-| 3.15 | Resources | `/app-resources` | ⚠️ PARTIAL — needs file upload wiring |
-| 3.16 | Products | `/products` | ⚠️ PARTIAL — needs thumbnail upload, CTA management |
-| 3.17 | Notifications | `/app-notifications` | ⚠️ PARTIAL — needs recipient targeting |
-| 3.18 | Member Progress | `/members/:id` (Progress tab) | ❌ NOT STARTED |
+| 3.15 | Resources | `/app-resources` | ✅ DONE |
+| 3.16 | Products | `/products` | ✅ DONE |
+| 3.17 | Notifications | `/app-notifications` | ✅ DONE |
+| 3.18 | Member Progress | `/members/:id` | ✅ DONE |
 
 ---
 
@@ -95,7 +95,7 @@ Full details in `admin-panel/app/workshops/[id]/page.tsx`.
 
 ## What Was Pre-Existing Before This Session
 
-The following pages/routes existed before the EiFlix PRD implementation began:
+The following pages/routes existed before the TBT PRD implementation began:
 - `/dashboard` — stats page
 - `/admins` + `/admins/create` — admin management
 - `/members` + `/members/add` — member management

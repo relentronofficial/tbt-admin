@@ -111,7 +111,7 @@ Admin Browser
        DB field: videoUrl on WorkshopEpisode / CourseEpisode
        embedUrl format: https://iframe.mediadelivery.net/embed/674791/{videoId}
 
-User-facing player (EiFlix app):
+User-facing player (TBT app):
   <iframe src="https://iframe.mediadelivery.net/embed/674791/{videoId}?autoplay=false" />
   OR HLS: https://{library-cdn}.b-cdn.net/{videoId}/playlist.m3u8
 ```
@@ -264,7 +264,7 @@ All image/thumbnail/document `*Url` fields already exist as `String?` — they j
 
 `WorkshopEpisode.videoUrl` and `CourseEpisode.videoUrl` are already `String?`. The value changes from an R2/Supabase URL to `https://iframe.mediadelivery.net/embed/674791/{videoId}`. No schema change.
 
-**Existing video data**: Any records with old Supabase/R2 video URLs continue to work — the EiFlix app would render them as a `<video src>` or in an `<iframe>`. New uploads will get the Bunny embed URL.
+**Existing video data**: Any records with old Supabase/R2 video URLs continue to work — the TBT app would render them as a `<video src>` or in an `<iframe>`. New uploads will get the Bunny embed URL.
 
 ### Optional — Bunny Video ID Tracking (Option B)
 

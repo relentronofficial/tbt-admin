@@ -4,11 +4,11 @@ export async function pubSiteConfigHandler(req: FastifyRequest, reply: FastifyRe
   let config = await req.server.prisma.siteConfig.findFirst();
   if (!config) {
     config = await req.server.prisma.siteConfig.create({
-      data: { siteName: 'EiFlix', footerText: '© EiFlix' },
+      data: { siteName: 'TBT', footerText: '© TBT' },
     });
   }
 
-  // Shape the response exactly as specified in EiFlix_PRD_Dynamic.md §2
+  // Shape the response exactly as specified in TBT_PRD_Dynamic.md §2
   return reply.send({
     success: true,
     data: {

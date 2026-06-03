@@ -1,6 +1,16 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../api/apiClient';
 
+export const useGetMember = (id: string) =>
+  useQuery({
+    queryKey: ['member', id],
+    queryFn: async () => {
+      const res: any = await apiClient.get(`/api/members/${id}`);
+      return res;
+    },
+    enabled: !!id,
+  });
+
 export const useListMembers = (params: { page?: number; limit?: number; search?: string } = {}) => {
   return useQuery({
     queryKey: ['members', params],

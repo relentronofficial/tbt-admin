@@ -1,7 +1,7 @@
 # PENDING_TASKS.md
 
 Detailed implementation guide for the remaining PRD sections.
-PRD source: `F:\admin\EiFlix_Admin_PRD.md`
+PRD source: `F:\admin\TBT_Admin_PRD.md`
 Last updated: 2026-06-02
 
 ---
@@ -198,7 +198,7 @@ Also check if `GET /api/members/:id` route exists in `backend/src/modules/member
 ## Additional Improvements (not in PRD, but noticed)
 
 ### Sidebar — Add Missing Links
-The current `Sidebar.tsx` is missing some EiFlix links. These routes exist but aren't in the sidebar:
+The current `Sidebar.tsx` is missing some TBT links. These routes exist but aren't in the sidebar:
 - Currently has: Hero Carousel, Sections, Courses, Workshops, Products, Resources, Notifications, Site Config, Navigation, UI Strings, Tiers, Badges
 
 ### Members Page — "View Details" Link
@@ -214,7 +214,7 @@ Before starting any task:
 2. Check if backend route already exists (read `backend/src/modules/<name>/routes.ts`)
 3. Check if hooks already exist (grep `useTbt.ts`)
 4. Read the current page file to understand what already exists
-5. Read PRD section in `F:\admin\EiFlix_Admin_PRD.md` for exact field requirements
+5. Read PRD section in `F:\admin\TBT_Admin_PRD.md` for exact field requirements
 
 After implementing:
 1. Run TypeScript check on modified files

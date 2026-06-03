@@ -442,6 +442,12 @@ export default function MembersListPage() {
                               className="absolute right-0 mt-2 w-48 bg-[#141414] border border-[#2a2a2a] rounded-lg shadow-2xl z-[100] py-1 overflow-hidden"
                             >
                               <button
+                                onClick={() => { router.push(`/members/${member.id}`); setActiveMenuId(null); }}
+                                className="w-full flex items-center gap-3 px-4 py-2.5 text-[12px] text-[#a0a0a0] hover:text-white hover:bg-[#2a2a2a] transition-colors font-bold uppercase tracking-wider font-rajdhani"
+                              >
+                                <Eye size={14} className="text-blue-500" /> View Details
+                              </button>
+                              <button
                                 onClick={() => {
                                     setViewingMember(member);
                                     setActiveMenuId(null);

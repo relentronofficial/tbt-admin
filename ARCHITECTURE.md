@@ -53,7 +53,7 @@ tbt-admin/
 │       ├── api/
 │       │   └── apiClient.ts              # Axios instance (baseURL → port 8000)
 │       ├── hooks/
-│       │   ├── useTbt.ts                 # All EiFlix-related hooks (600+ lines)
+│       │   ├── useTbt.ts                 # All TBT-related hooks (600+ lines)
 │       │   └── useAdmin.ts               # Admin/member/upload hooks
 │       └── validators/                   # Zod schemas
 │
@@ -100,7 +100,7 @@ tbt-admin/
 
 ---
 
-## Backend Route Map (relevant to EiFlix PRD)
+## Backend Route Map (relevant to TBT PRD)
 
 All routes registered in `backend/src/server.ts`. All use `fastify.authenticate` (Clerk admin check).
 
@@ -181,7 +181,7 @@ All hooks from `lib/hooks/useAdmin.ts`:
 
 Schema at: `backend/prisma/schema.prisma`
 
-**EiFlix-related models:**
+**TBT-related models:**
 - `SiteConfig` — singleton site branding/theme
 - `UiStrings` — singleton UI label config
 - `NavItem` — navbar items with order
@@ -284,7 +284,7 @@ NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/dashboard
 
 ## Important Architectural Decisions
 
-1. **Single `useTbt.ts` file** — all EiFlix hooks in one file (~600+ lines). When adding new hooks, append to the bottom of this file.
+1. **Single `useTbt.ts` file** — all TBT hooks in one file (~600+ lines). When adding new hooks, append to the bottom of this file.
 
 2. **No mock DB in tests** — integration testing only (no test suite currently exists).
 
