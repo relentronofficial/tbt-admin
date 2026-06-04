@@ -274,25 +274,31 @@ async function main() {
   await prisma.contentItem.deleteMany();
   await prisma.contentSection.deleteMany();
 
+  // Look up created workshops for relation linking
+  const [wsDrip, wsZero] = await Promise.all([
+    prisma.workshop.findUnique({ where: { slug: 'drip-marketing-mastery' }, select: { id: true } }),
+    prisma.workshop.findUnique({ where: { slug: 'zero-rupee-marketing' },   select: { id: true } }),
+  ]);
+
   const courses = await prisma.course.findMany({ take: 4 });
   const sectionDefs = [
     { title: 'Featured Series', slug: 'featured-series', order: 1, requiredTier: 1,
       items: [
-        { title: 'Drip Marketing Mastery',       thumbnailUrl: IMG.drip,    contentType: 'series',     categoryTag: 'Marketing',   playUrl: '/workshops/drip-marketing-mastery' },
-        { title: 'Zero Rupee Marketing',          thumbnailUrl: IMG.zero,    contentType: 'series',     categoryTag: 'Growth',      playUrl: '/workshops/zero-rupee-marketing' },
-        { title: 'Business Scalability Blueprint',thumbnailUrl: IMG.scale,   contentType: 'series',     categoryTag: 'Strategy',    playUrl: '/tbt' },
-        { title: 'Mindset Mastery Podcast',       thumbnailUrl: IMG.mindset, contentType: 'podcast',    categoryTag: 'Mindset',     playUrl: '/tbt' },
+        { title: 'Drip Marketing Mastery',        thumbnailUrl: IMG.drip,       contentType: 'series',     categoryTag: 'Marketing',    workshopId: wsDrip?.id ?? null,  playUrl: null },
+        { title: 'Zero Rupee Marketing',           thumbnailUrl: IMG.zero,       contentType: 'series',     categoryTag: 'Growth',       workshopId: wsZero?.id ?? null,  playUrl: null },
+        { title: 'Business Scalability Blueprint', thumbnailUrl: IMG.scale,      contentType: 'series',     categoryTag: 'Strategy',     workshopId: null, playUrl: '/tbt' },
+        { title: 'Mindset Mastery Podcast',        thumbnailUrl: IMG.mindset,    contentType: 'podcast',    categoryTag: 'Mindset',      workshopId: null, playUrl: '/tbt' },
       ]},
     { title: 'Continue Learning', slug: 'continue-learning', order: 2, requiredTier: 1,
       items: [
-        { title: 'Digital Marketing Fundamentals',thumbnailUrl: IMG.drip,    contentType: 'standalone', categoryTag: 'Marketing',   playUrl: '/tbt' },
-        { title: 'Mindset & Productivity',        thumbnailUrl: IMG.mindset, contentType: 'standalone', categoryTag: 'Productivity',playUrl: '/tbt' },
-        { title: 'Customer Acquisition',          thumbnailUrl: IMG.screenshot, contentType: 'standalone', categoryTag: 'Sales',    playUrl: '/tbt' },
+        { title: 'Digital Marketing Fundamentals', thumbnailUrl: IMG.drip,       contentType: 'standalone', categoryTag: 'Marketing',    workshopId: null, playUrl: '/tbt' },
+        { title: 'Mindset & Productivity',         thumbnailUrl: IMG.mindset,    contentType: 'standalone', categoryTag: 'Productivity', workshopId: null, playUrl: '/tbt' },
+        { title: 'Customer Acquisition',           thumbnailUrl: IMG.screenshot, contentType: 'standalone', categoryTag: 'Sales',        workshopId: null, playUrl: '/tbt' },
       ]},
     { title: 'Tier 2 Exclusive', slug: 'tier-2-exclusive', order: 3, requiredTier: 2, lockBadgeText: 'Builder',
       items: [
-        { title: 'Advanced Sales Funnel Design',  thumbnailUrl: IMG.scale,   contentType: 'series',     categoryTag: 'Sales',       playUrl: '/tbt', requiredTier: 2 },
-        { title: 'Team Building Masterclass',     thumbnailUrl: IMG.screenshot,contentType: 'series',   categoryTag: 'Leadership',  playUrl: '/tbt', requiredTier: 2 },
+        { title: 'Advanced Sales Funnel Design',   thumbnailUrl: IMG.scale,      contentType: 'series',     categoryTag: 'Sales',        workshopId: null, playUrl: '/tbt', requiredTier: 2 },
+        { title: 'Team Building Masterclass',      thumbnailUrl: IMG.screenshot, contentType: 'series',     categoryTag: 'Leadership',   workshopId: null, playUrl: '/tbt', requiredTier: 2 },
       ]},
   ];
 
@@ -308,7 +314,9 @@ async function main() {
         sectionId: section.id, order: i + 1, isVisible: true,
         title: item.title, thumbnailUrl: item.thumbnailUrl,
         contentType: item.contentType, categoryTag: item.categoryTag,
-        playUrl: item.playUrl, requiredTier: (item as any).requiredTier ?? sDef.requiredTier,
+        workshopId: (item as any).workshopId ?? null,
+        playUrl: (item as any).workshopId ? null : (item.playUrl ?? null),
+        requiredTier: (item as any).requiredTier ?? sDef.requiredTier,
       }});
     }
     console.log(`   ✅ Section: ${section.title} (${sDef.items.length} items)`);

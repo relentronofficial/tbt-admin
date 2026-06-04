@@ -909,7 +909,6 @@ export async function getHomeSectionsHandler(request: FastifyRequest, reply: Fas
                 orderBy: { order: 'asc' },
                 select: {
                   episodes: {
-                    where: {},
                     orderBy: { order: 'asc' },
                     take: 20,
                     select: {
