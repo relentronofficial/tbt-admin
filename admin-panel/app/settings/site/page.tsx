@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Loader2, Save, Upload, X, Image as ImageIcon } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useGetSiteConfig, useUpdateSiteConfig } from "@/lib/hooks/useTbt";
-import { useGetPresignedUrl } from "@/lib/hooks/useAdmin";
+import { useUploadImage } from "@/lib/hooks/useAdmin";
 import { toast } from "react-hot-toast";
 
 const COLOR_FIELDS = [
@@ -28,7 +28,7 @@ interface ImageUploadFieldProps {
 
 function ImageUploadField({ label, value, fieldKey, onUploaded, uploading, setUploading }: ImageUploadFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const getPresignedUrl = useGetPresignedUrl();
+  const uploadImage = useUploadImage();
   const isUploading = uploading === fieldKey;
 
   const handleFile = async (file: File) => {
@@ -38,13 +38,7 @@ function ImageUploadField({ label, value, fieldKey, onUploaded, uploading, setUp
     }
     try {
       setUploading(fieldKey);
-      const { uploadUrl, publicUrl } = await getPresignedUrl.mutateAsync({
-        filename: file.name,
-        contentType: file.type,
-        bucket: "site-assets",
-        pathPrefix: `site/${fieldKey}`,
-      });
-      await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      const { publicUrl } = await uploadImage.mutateAsync({ file, pathPrefix: `site/${fieldKey}` });
       onUploaded(fieldKey, publicUrl);
       toast.success(`${label} uploaded`);
     } catch (e: any) {

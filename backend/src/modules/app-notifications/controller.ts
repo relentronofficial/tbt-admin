@@ -50,6 +50,17 @@ export async function createNotificationHandler(req: FastifyRequest, reply: Fast
     },
     include: { _count: { select: { recipients: true } } },
   });
+
+  // Emit real-time socket events
+  const payload = { title, body: message, type: type || 'info' };
+  if (recipientType === 'all' || targetMemberIds.length === 0) {
+    req.server.io.emit('notification:broadcast', payload);
+  } else {
+    for (const memberId of targetMemberIds) {
+      req.server.io.to(`user:${memberId}`).emit('notification', payload);
+    }
+  }
+
   return reply.status(201).send({ success: true, data: notification, error: null });
 }
 

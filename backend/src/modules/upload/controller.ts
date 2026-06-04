@@ -4,6 +4,40 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { createHash } from 'crypto';
 import { env } from '../../config/env.js';
 
+export async function uploadImageHandler(req: FastifyRequest, reply: FastifyReply) {
+  const { pathPrefix = 'uploads', filename = 'file' } = req.query as { pathPrefix?: string; filename?: string };
+  const contentType = (req.headers['content-type'] || 'application/octet-stream').split(';')[0].trim();
+  const body = req.body as Buffer;
+
+  if (!env.BUNNY_STORAGE_HOSTNAME || !env.BUNNY_STORAGE_ZONE || !env.BUNNY_STORAGE_ACCESS_KEY || !env.BUNNY_CDN_URL) {
+    return reply.status(503).send({
+      success: false,
+      error: { code: 'SERVICE_UNAVAILABLE', message: 'Bunny Storage not configured' },
+    });
+  }
+
+  const safeFilename = filename.replace(/[^a-zA-Z0-9._-]/g, '-');
+  const key = `${pathPrefix}/${Date.now()}-${safeFilename}`;
+  const uploadUrl = `https://${env.BUNNY_STORAGE_HOSTNAME}/${env.BUNNY_STORAGE_ZONE}/${key}`;
+
+  const res = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: { AccessKey: env.BUNNY_STORAGE_ACCESS_KEY, 'Content-Type': contentType },
+    body: new Uint8Array(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    req.log.error(`Bunny Storage upload failed [${res.status}]: ${text}`);
+    return reply.status(502).send({
+      success: false,
+      error: { code: 'UPLOAD_ERROR', message: 'Bunny Storage upload failed' },
+    });
+  }
+
+  return reply.send({ success: true, data: { publicUrl: `https://${env.BUNNY_CDN_URL}/${key}` }, error: null });
+}
+
 function getS3Client(): S3Client {
   return new S3Client({
     region: 'auto',

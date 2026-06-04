@@ -307,6 +307,8 @@ model Member {
   appNotifications          AppNotificationRecipient[]
   directMessages            DirectMessage[]
   conversations             Conversation[]
+  courseEpisodeProgress     CourseEpisodeProgress[]
+  challengeProgress         MemberChallengeProgress[]
 
   @@map("members")
 }
@@ -1463,6 +1465,9 @@ model Challenge {
   numberColor     String             @default("#00c4cc") @map("number_color")
   title           String
   description     String?
+  type            String             @default("watch")
+  quizData        Json?              @map("quiz_data")
+  memberProgress  MemberChallengeProgress[]
   workshop        Workshop           @relation(fields: [workshopId], references: [id], onDelete: Cascade)
   episodes        WorkshopEpisode[]
   assignments     Assignment[]
@@ -1508,6 +1513,22 @@ model MemberEpisodeProgress {
 
   @@unique([memberId, episodeId])
   @@map("member_episode_progress")
+}
+
+model MemberChallengeProgress {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId    String    @map("member_id") @db.Uuid
+  challengeId String    @map("challenge_id") @db.Uuid
+  status      String    @default("not_started")
+  answersData Json?     @map("answers_data")
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  member      Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  challenge   Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, challengeId])
+  @@map("member_challenge_progress")
 }
 
 model LiveCall {
@@ -1780,11 +1801,28 @@ model CourseEpisode {
   durationSeconds Int      @default(0) @map("duration_seconds")
   order           Int      @default(0)
   isVisible       Boolean  @default(true) @map("is_visible")
-  course          Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  course          Course                  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  progress        CourseEpisodeProgress[]
+  createdAt       DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("course_episodes")
+}
+
+model CourseEpisodeProgress {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId    String    @map("member_id") @db.Uuid
+  episodeId   String    @map("episode_id") @db.Uuid
+  completed   Boolean   @default(false)
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  member  Member        @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  episode CourseEpisode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  @@unique([memberId, episodeId])
+  @@map("course_episode_progress")
 }
 
 model ProductsPageConfig {

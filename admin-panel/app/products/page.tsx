@@ -7,7 +7,7 @@ import {
   useListProducts, useCreateProduct, useUpdateProduct, useDeleteProduct,
   useGetProductsPageConfig, useUpdateProductsPageConfig, useReorderProducts,
 } from "@/lib/hooks/useTbt";
-import { useGetPresignedUrl } from "@/lib/hooks/useAdmin";
+import { useUploadImage } from "@/lib/hooks/useAdmin";
 import { toast } from "react-hot-toast";
 
 const CTA_TYPES = ["primary", "secondary"];
@@ -23,7 +23,7 @@ export default function ProductsPage() {
   const updateProduct = useUpdateProduct();
   const deleteProduct = useDeleteProduct();
   const reorderProducts = useReorderProducts();
-  const getPresignedUrl = useGetPresignedUrl();
+  const uploadImage = useUploadImage();
 
   // ── Page Config ───────────────────────────────────────────────────────
   const { data: pageConfigData } = useGetProductsPageConfig();
@@ -88,8 +88,7 @@ export default function ProductsPage() {
     if (!file) return;
     setUploadingThumb(true);
     try {
-      const { uploadUrl, publicUrl } = await getPresignedUrl.mutateAsync({ filename: file.name, contentType: file.type, bucket: "products", pathPrefix: "thumbnails" });
-      await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      const { publicUrl } = await uploadImage.mutateAsync({ file, pathPrefix: "products/thumbnails" });
       setForm((f: any) => ({ ...f, thumbnailUrl: publicUrl }));
     } catch (err: any) { toast.error(err.message || "Upload failed"); }
     finally { setUploadingThumb(false); e.target.value = ""; }

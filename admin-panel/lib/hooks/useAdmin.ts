@@ -172,6 +172,18 @@ export const useGetPresignedUrl = () => {
   });
 };
 
+export const useUploadImage = () => {
+  return useMutation({
+    mutationFn: async ({ file, pathPrefix }: { file: File; pathPrefix: string }) => {
+      const params = new URLSearchParams({ pathPrefix, filename: file.name }).toString();
+      const res: any = await apiClient.post(`/api/upload/image?${params}`, file, {
+        headers: { 'Content-Type': file.type },
+      });
+      return (res.data || res) as { publicUrl: string };
+    },
+  });
+};
+
 export const useCreateBunnyVideo = () => {
   return useMutation({
     mutationFn: async ({ title }: { title: string }) => {

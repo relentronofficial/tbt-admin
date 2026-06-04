@@ -18,7 +18,7 @@ import { z } from "zod";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { cn } from "@/lib/utils";
 import { toast } from "react-hot-toast";
-import { useGetPresignedUrl } from "@/lib/hooks/useAdmin";
+import { useUploadImage } from "@/lib/hooks/useAdmin";
 import { useCreateMember, useGetManagers } from "@/lib/hooks/useMembers";
 import { AccountManagerSelect } from "@/components/members/AccountManagerSelect";
 import { useClerk } from "@clerk/nextjs";
@@ -81,7 +81,7 @@ export default function AddMemberPage() {
 
   const { data: managers, isLoading: isLoadingManagers } = useGetManagers();
   const createMember = useCreateMember();
-  const getPresignedUrl = useGetPresignedUrl();
+  const uploadImage = useUploadImage();
 
   const {
     register,
@@ -141,24 +141,12 @@ export default function AddMemberPage() {
       let kycDocumentUrl = "";
 
       if (profileImage) {
-        const { uploadUrl, publicUrl } = await getPresignedUrl.mutateAsync({
-          filename: profileImage.name,
-          contentType: profileImage.type,
-          bucket: "profile-photos",
-          pathPrefix: "members/photos"
-        });
-        await fetch(uploadUrl, { method: 'PUT', body: profileImage, headers: { 'Content-Type': profileImage.type } });
+        const { publicUrl } = await uploadImage.mutateAsync({ file: profileImage, pathPrefix: "members/photos" });
         profilePhotoUrl = publicUrl;
       }
 
       if (kycDoc) {
-        const { uploadUrl, publicUrl } = await getPresignedUrl.mutateAsync({
-          filename: kycDoc.name,
-          contentType: kycDoc.type,
-          bucket: "kyc-documents",
-          pathPrefix: "members/kyc"
-        });
-        await fetch(uploadUrl, { method: 'PUT', body: kycDoc, headers: { 'Content-Type': kycDoc.type } });
+        const { publicUrl } = await uploadImage.mutateAsync({ file: kycDoc, pathPrefix: "members/kyc" });
         kycDocumentUrl = publicUrl;
       }
 

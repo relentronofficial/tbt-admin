@@ -4,7 +4,7 @@ import { useState, useRef } from "react";
 import { Plus, Trash2, Pencil, X, Loader2, Clapperboard, AlertCircle, Search, Users, ChevronRight, Upload, CheckCircle2, XCircle } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useListWorkshops, useCreateWorkshop, useUpdateWorkshop, useDeleteWorkshop, useListBatches } from "@/lib/hooks/useTbt";
-import { useGetPresignedUrl } from "@/lib/hooks/useAdmin";
+import { useUploadImage } from "@/lib/hooks/useAdmin";
 import { toast } from "react-hot-toast";
 import { useRouter } from "next/navigation";
 
@@ -36,19 +36,13 @@ function ThumbnailUpload({
   setUploading: (v: boolean) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const getPresignedUrl = useGetPresignedUrl();
+  const uploadImage = useUploadImage();
 
   const handleFile = async (file: File) => {
     if (!file.type.startsWith("image/")) return toast.error("Images only");
     setUploading(true);
     try {
-      const { uploadUrl, publicUrl } = await getPresignedUrl.mutateAsync({
-        filename: file.name,
-        contentType: file.type,
-        bucket: "workshops",
-        pathPrefix: "thumbnails",
-      });
-      await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      const { publicUrl } = await uploadImage.mutateAsync({ file, pathPrefix: "workshops/thumbnails" });
       onUploaded(publicUrl);
     } catch {
       toast.error("Upload failed");

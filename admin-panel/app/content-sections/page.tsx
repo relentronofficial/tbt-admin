@@ -13,7 +13,7 @@ import {
   useDeleteContentItem, useReorderContentItems,
   useListVodCourses, useListWorkshops,
 } from "@/lib/hooks/useTbt";
-import { useGetPresignedUrl } from "@/lib/hooks/useAdmin";
+import { useUploadImage } from "@/lib/hooks/useAdmin";
 import { toast } from "react-hot-toast";
 
 const CONTENT_TYPES = ["series", "standalone", "podcast"];
@@ -34,17 +34,14 @@ const toSlug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replac
 // ── Thumbnail upload button ───────────────────────────────────────────
 function ThumbnailUpload({ value, onUploaded }: { value: string; onUploaded: (url: string) => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const getPresignedUrl = useGetPresignedUrl();
+  const uploadImage = useUploadImage();
   const [uploading, setUploading] = useState(false);
 
   const handleFile = async (file: File) => {
     if (!file.type.startsWith("image/")) return toast.error("Image files only");
     try {
       setUploading(true);
-      const { uploadUrl, publicUrl } = await getPresignedUrl.mutateAsync({
-        filename: file.name, contentType: file.type, bucket: "content-items", pathPrefix: "thumbnails",
-      });
-      await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      const { publicUrl } = await uploadImage.mutateAsync({ file, pathPrefix: "content-items/thumbnails" });
       onUploaded(publicUrl);
       toast.success("Thumbnail uploaded");
     } catch (e: any) {

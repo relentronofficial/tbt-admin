@@ -24,6 +24,7 @@ import {
   markAllMessagesReadHandler,
   getHomeHeroHandler,
   getHomeSectionsHandler,
+  listWorkshopsHandler,
   getMyWorkshopsHandler,
   getWorkshopDetailHandler,
   getWorkshopFlowHandler,
@@ -40,6 +41,9 @@ import {
   listMemberConversationsHandler,
   getMemberConversationMessagesHandler,
   sendMemberChatMessageHandler,
+  getWorkshopChallengesHandler,
+  completeChallengeHandler,
+  completeWorkshopEpisodeHandler,
 } from './controller.js';
 
 export async function userRoutes(fastify: FastifyInstance) {
@@ -89,6 +93,7 @@ export async function userRoutes(fastify: FastifyInstance) {
   fastify.get('/home/sections', getHomeSectionsHandler);
 
   // ── Workshops (user-facing) ───────────────────────────────────────────────
+  fastify.get('/workshops', listWorkshopsHandler);
   fastify.get('/workshops/my', getMyWorkshopsHandler);
   fastify.get('/workshops/:slug/detail', getWorkshopDetailHandler);
   fastify.get('/workshops/:slug/flow', getWorkshopFlowHandler);
@@ -97,6 +102,11 @@ export async function userRoutes(fastify: FastifyInstance) {
   fastify.post('/qa/:postId/reply', postQaReplyHandler);
   fastify.get('/workshops/:slug/assignments', getWorkshopAssignmentsHandler);
   fastify.post('/assignments/:id/submit', submitAssignmentHandler);
+
+  // ── Challenges ────────────────────────────────────────────────────────────
+  fastify.get('/workshops/:slug/challenges', getWorkshopChallengesHandler);
+  fastify.post('/challenges/:id/complete', completeChallengeHandler);
+  fastify.post('/workshop-episodes/:id/complete', completeWorkshopEpisodeHandler);
 
   // ── Episodes ──────────────────────────────────────────────────────────────
   fastify.get('/episodes/:id/playback', getEpisodePlaybackHandler);

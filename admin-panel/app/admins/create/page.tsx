@@ -40,7 +40,7 @@ import {
   useGetCities, 
   useGeneratePassword, 
   useCreateAdmin,
-  useGetPresignedUrl 
+  useUploadImage
 } from "@/lib/hooks/useAdmin";
 import { toast } from "react-hot-toast";
 
@@ -67,7 +67,7 @@ export default function CreateAdminPage() {
   const checkEmail = useCheckEmail();
   const generatePassword = useGeneratePassword();
   const createAdmin = useCreateAdmin();
-  const getPresignedUrl = useGetPresignedUrl();
+  const uploadImage = useUploadImage();
 
   const {
     register,
@@ -274,16 +274,7 @@ export default function CreateAdminPage() {
       let profilePhotoUrl = "";
 
       if (selectedFile) {
-        const { uploadUrl, publicUrl } = await getPresignedUrl.mutateAsync({
-          filename: selectedFile.name,
-          contentType: selectedFile.type
-        });
-
-        await fetch(uploadUrl, {
-          method: 'PUT',
-          body: selectedFile,
-          headers: { 'Content-Type': selectedFile.type }
-        });
+        const { publicUrl } = await uploadImage.mutateAsync({ file: selectedFile, pathPrefix: "admins/photos" });
         profilePhotoUrl = publicUrl;
       }
 

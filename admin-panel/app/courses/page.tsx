@@ -11,7 +11,7 @@ import {
   useListCourseEpisodes, useCreateCourseEpisode, useUpdateCourseEpisode,
   useDeleteCourseEpisode, useReorderCourseEpisodes,
 } from "@/lib/hooks/useTbt";
-import { useGetPresignedUrl, useCreateBunnyVideo } from "@/lib/hooks/useAdmin";
+import { useUploadImage, useCreateBunnyVideo } from "@/lib/hooks/useAdmin";
 import { toast } from "react-hot-toast";
 
 const toSlug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
@@ -21,23 +21,20 @@ const EMPTY_EP = { title: "", videoUrl: "", bunnyVideoId: "", thumbnailUrl: "", 
 
 // ── Single-file upload button ─────────────────────────────────────────
 function FileUploadBtn({
-  label, value, accept, bucket, pathPrefix, onUploaded, uploading, setUploading, uploadKey,
+  label, value, accept, pathPrefix, onUploaded, uploading, setUploading, uploadKey,
 }: {
-  label: string; value: string; accept: string; bucket: string; pathPrefix: string;
+  label: string; value: string; accept: string; pathPrefix: string;
   onUploaded: (url: string) => void; uploading: string | null;
   setUploading: (k: string | null) => void; uploadKey: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const getPresignedUrl = useGetPresignedUrl();
+  const uploadImage = useUploadImage();
   const isUploading = uploading === uploadKey;
 
   const handleFile = async (file: File) => {
     try {
       setUploading(uploadKey);
-      const { uploadUrl, publicUrl } = await getPresignedUrl.mutateAsync({
-        filename: file.name, contentType: file.type, bucket, pathPrefix,
-      });
-      await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      const { publicUrl } = await uploadImage.mutateAsync({ file, pathPrefix });
       onUploaded(publicUrl);
       toast.success(`${label} uploaded`);
     } catch (e: any) {
@@ -241,8 +238,7 @@ export default function CoursesPage() {
                 label="Thumbnail"
                 value={courseForm.thumbnailUrl}
                 accept="image/png,image/jpeg,image/webp"
-                bucket="courses"
-                pathPrefix="thumbnails"
+                pathPrefix="courses/thumbnails"
                 uploadKey="courseThumbnail"
                 uploading={courseUploading}
                 setUploading={setCourseUploading}
@@ -377,7 +373,7 @@ function EpisodesPanel({ course, onClose }: { course: any; onClose: () => void }
     catch (e: any) { toast.error(e.message || "Failed"); }
   };
 
-  const getPresignedUrl = useGetPresignedUrl();
+  const uploadImage = useUploadImage();
   const createBunnyVideo = useCreateBunnyVideo();
   const [uploadProgress, setUploadProgress] = useState<number>(0);
 
@@ -434,10 +430,7 @@ function EpisodesPanel({ course, onClose }: { course: any; onClose: () => void }
   const handleThumbUpload = async (file: File) => {
     try {
       setEpUploading("thumb");
-      const { uploadUrl, publicUrl } = await getPresignedUrl.mutateAsync({
-        filename: file.name, contentType: file.type, bucket: "course-videos", pathPrefix: "episode-thumbs",
-      });
-      await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      const { publicUrl } = await uploadImage.mutateAsync({ file, pathPrefix: "course-videos/episode-thumbs" });
       setEpField("thumbnailUrl", publicUrl);
       toast.success("Thumbnail uploaded");
     } catch (e: any) { toast.error(e.message || "Upload failed"); }

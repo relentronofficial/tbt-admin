@@ -36,7 +36,7 @@ import {
 import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useListMembers, useUpdateMember, useDeleteMember, useGetManagers } from "@/lib/hooks/useMembers";
-import { useGetPresignedUrl } from "@/lib/hooks/useAdmin";
+import { useUploadImage } from "@/lib/hooks/useAdmin";
 import { useMemberProgress, useListMemberBadges, useListAllBadges, useAssignBadge, useRemoveBadge, useListTiers, useListWorkshops, useMemberEnrollments, useEnrollMemberInWorkshop, useRemoveMemberEnrollment } from "@/lib/hooks/useTbt";
 import { cn } from "@/lib/utils";
 import { format, isValid } from "date-fns";
@@ -119,7 +119,7 @@ export default function MembersListPage() {
   const updateMember = useUpdateMember();
   const deleteMember = useDeleteMember();
   const { data: managers } = useGetManagers();
-  const getPresignedUrl = useGetPresignedUrl();
+  const uploadImage = useUploadImage();
   const { data: tiersData } = useListTiers();
   const tiers = (tiersData as any)?.data || [];
   const { data: workshopsData } = useListWorkshops();
@@ -248,13 +248,7 @@ export default function MembersListPage() {
         payload.password = password;
       }
       if (editKycDoc) {
-        const { uploadUrl, publicUrl } = await getPresignedUrl.mutateAsync({
-          filename: editKycDoc.name,
-          contentType: editKycDoc.type,
-          bucket: "kyc-documents",
-          pathPrefix: "members/kyc",
-        });
-        await fetch(uploadUrl, { method: "PUT", body: editKycDoc, headers: { "Content-Type": editKycDoc.type } });
+        const { publicUrl } = await uploadImage.mutateAsync({ file: editKycDoc, pathPrefix: "members/kyc" });
         payload.kycDocumentUrl = publicUrl;
       }
       await updateMember.mutateAsync({ id: editingMember.id, data: payload });

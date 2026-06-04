@@ -7,7 +7,7 @@ import {
   useListAppResources, useCreateAppResource, useUpdateAppResource, useDeleteAppResource,
   useGetResourcesPageConfig, useUpdateResourcesPageConfig, useReorderAppResources,
 } from "@/lib/hooks/useTbt";
-import { useGetPresignedUrl } from "@/lib/hooks/useAdmin";
+import { useUploadImage } from "@/lib/hooks/useAdmin";
 import { toast } from "react-hot-toast";
 import { format } from "date-fns";
 
@@ -46,7 +46,7 @@ export default function AppResourcesPage() {
   const updateResource = useUpdateAppResource();
   const deleteResource = useDeleteAppResource();
   const reorderResources = useReorderAppResources();
-  const getPresignedUrl = useGetPresignedUrl();
+  const uploadImage = useUploadImage();
 
   const { data: pageConfigData } = useGetResourcesPageConfig();
   const updatePageConfig = useUpdateResourcesPageConfig();
@@ -103,9 +103,8 @@ export default function AppResourcesPage() {
   const [uploadingPreview, setUploadingPreview] = useState(false);
   const [uploadingIcon, setUploadingIcon] = useState(false);
 
-  const uploadToR2 = async (file: File, bucket: string, pathPrefix: string): Promise<string> => {
-    const { uploadUrl, publicUrl } = await getPresignedUrl.mutateAsync({ filename: file.name, contentType: file.type, bucket, pathPrefix });
-    await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+  const uploadToStorage = async (file: File, pathPrefix: string): Promise<string> => {
+    const { publicUrl } = await uploadImage.mutateAsync({ file, pathPrefix });
     return publicUrl;
   };
 
@@ -114,7 +113,7 @@ export default function AppResourcesPage() {
     if (!file) return;
     setUploadingFile(true);
     try {
-      const url = await uploadToR2(file, "resources", "files");
+      const url = await uploadToStorage(file, "resources/files");
       setForm((f: any) => ({ ...f, fileUrl: url, fileType: detectFileType(file.name) }));
     } catch (err: any) { toast.error(err.message || "Upload failed"); }
     finally { setUploadingFile(false); e.target.value = ""; }
@@ -125,7 +124,7 @@ export default function AppResourcesPage() {
     if (!file) return;
     setUploadingPreview(true);
     try {
-      const url = await uploadToR2(file, "resources", "previews");
+      const url = await uploadToStorage(file, "resources/previews");
       setForm((f: any) => ({ ...f, previewUrl: url }));
     } catch (err: any) { toast.error(err.message || "Upload failed"); }
     finally { setUploadingPreview(false); e.target.value = ""; }
@@ -136,7 +135,7 @@ export default function AppResourcesPage() {
     if (!file) return;
     setUploadingIcon(true);
     try {
-      const url = await uploadToR2(file, "resources", "icons");
+      const url = await uploadToStorage(file, "resources/icons");
       setForm((f: any) => ({ ...f, fileTypeIconUrl: url }));
     } catch (err: any) { toast.error(err.message || "Upload failed"); }
     finally { setUploadingIcon(false); e.target.value = ""; }

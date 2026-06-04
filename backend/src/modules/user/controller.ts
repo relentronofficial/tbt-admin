@@ -219,49 +219,32 @@ export async function listUserCoursesHandler(request: FastifyRequest, reply: Fas
 export async function getUserCourseHandler(request: FastifyRequest, reply: FastifyReply) {
   const { id } = request.params as { id: string };
 
-  const course = await (request.server.prisma.course.findUnique as any)({
+  const course = await request.server.prisma.course.findUnique({
     where: { id },
     include: {
       creator: {
         select: { id: true, fullName: true, profilePhotoUrl: true, designation: true },
       },
-      modules: {
-        where: { isPublished: true },
-        orderBy: { sortOrder: 'asc' },
-        include: {
-          lessons: {
-            where: { isPublished: true },
-            orderBy: { sortOrder: 'asc' },
-            select: {
-              id: true,
-              title: true,
-              description: true,
-              contentUrl: true,
-              durationMinutes: true,
-              sortOrder: true,
-              isLocked: true,
-            },
-          },
-        },
+      courseEpisodes: {
+        where: { isVisible: true },
+        orderBy: { order: 'asc' },
       },
       _count: { select: { enrollments: true } },
     },
-  }) as any;
+  });
 
-  if (!course || !course.isPublished) return fail(reply, 404, 'Course not found');
+  if (!course) return fail(reply, 404, 'Course not found');
 
-  // Flatten lessons from all modules
-  const lessons = (course.modules as any[]).flatMap((m: any) =>
-    (m.lessons as any[]).map((l: any) => ({
-      id: l.id,
-      title: l.title,
-      description: l.description,
-      videoUrl: l.contentUrl,
-      duration: l.durationMinutes,
-      order: l.sortOrder,
-      isFree: !l.isLocked,
-    }))
-  );
+  const lessons = course.courseEpisodes.map((ep) => ({
+    id: ep.id,
+    title: ep.title,
+    description: null as string | null,
+    videoUrl: ep.videoUrl,
+    duration: ep.durationSeconds ? Math.round(ep.durationSeconds / 60) : null,
+    durationSeconds: ep.durationSeconds ?? null,
+    order: ep.order,
+    isFree: false,
+  }));
 
   return ok(reply, {
     id: course.id,
@@ -371,25 +354,15 @@ export async function getEnrollmentsHandler(request: FastifyRequest, reply: Fast
 export async function getLessonProgressHandler(request: FastifyRequest, reply: FastifyReply) {
   const { courseId } = request.params as { courseId: string };
 
-  // Collect all lesson IDs for this course across its modules
-  const modules = await request.server.prisma.module.findMany({
-    where: { courseId },
-    select: { lessons: { select: { id: true, durationMinutes: true } } },
-  });
-  const lessonIds = modules.flatMap((m) => m.lessons.map((l) => l.id));
-  const lessonDurations = Object.fromEntries(
-    modules.flatMap((m) => m.lessons.map((l) => [l.id, l.durationMinutes ?? 0]))
-  );
-
-  const progress = await request.server.prisma.lessonProgress.findMany({
-    where: { memberId: request.memberId, lessonId: { in: lessonIds } },
-    select: { lessonId: true, completed: true, watchPercentage: true, completedAt: true },
+  const progress = await (request.server.prisma as any).courseEpisodeProgress.findMany({
+    where: { memberId: request.memberId, episode: { courseId } },
+    select: { episodeId: true, completed: true, completedAt: true },
   });
 
-  const data = progress.map((p) => ({
-    lessonId: p.lessonId,
+  const data = (progress as any[]).map((p) => ({
+    lessonId: p.episodeId,
     completed: p.completed,
-    watchedSeconds: Math.floor((p.watchPercentage / 100) * (lessonDurations[p.lessonId] ?? 0) * 60),
+    watchedSeconds: 0,
     completedAt: p.completedAt ?? null,
   }));
 
@@ -397,66 +370,40 @@ export async function getLessonProgressHandler(request: FastifyRequest, reply: F
 }
 
 export async function markLessonCompleteHandler(request: FastifyRequest, reply: FastifyReply) {
-  const { courseId, lessonId } = request.params as { courseId: string; lessonId: string };
+  const { courseId, lessonId: episodeId } = request.params as { courseId: string; lessonId: string };
   const { watchedSeconds } = request.body as { watchedSeconds?: number };
 
-  // Verify lesson belongs to this course
-  const lesson = await request.server.prisma.lesson.findFirst({
-    where: { id: lessonId, module: { courseId } },
-    select: { id: true, durationMinutes: true },
+  const episode = await request.server.prisma.courseEpisode.findFirst({
+    where: { id: episodeId, courseId },
+    select: { id: true },
   });
-  if (!lesson) return fail(reply, 404, 'Lesson not found in this course');
+  if (!episode) return fail(reply, 404, 'Episode not found in this course');
 
-  // Compute watchPercentage from watchedSeconds if available
-  const watchPercentage =
-    watchedSeconds && lesson.durationMinutes
-      ? Math.min(100, Math.round((watchedSeconds / (lesson.durationMinutes * 60)) * 100))
-      : 100;
-
-  const progress = await request.server.prisma.lessonProgress.upsert({
-    where: { memberId_lessonId: { memberId: request.memberId, lessonId } },
-    create: {
-      memberId: request.memberId,
-      lessonId,
-      watchPercentage,
-      completed: true,
-      completedAt: new Date(),
-    },
-    update: {
-      watchPercentage,
-      completed: true,
-      completedAt: new Date(),
-    },
-    select: { lessonId: true, completed: true, watchPercentage: true, completedAt: true },
+  const now = new Date();
+  await (request.server.prisma as any).courseEpisodeProgress.upsert({
+    where: { memberId_episodeId: { memberId: request.memberId, episodeId } },
+    create: { memberId: request.memberId, episodeId, completed: true, completedAt: now },
+    update: { completed: true, completedAt: now },
   });
 
-  // Recalculate and persist course progress percentage
   await recalculateCourseProgress(request, courseId);
 
   return ok(reply, {
-    lessonId: progress.lessonId,
-    completed: progress.completed,
+    lessonId: episodeId,
+    completed: true,
     watchedSeconds: watchedSeconds ?? 0,
-    completedAt: progress.completedAt ?? null,
+    completedAt: now.toISOString(),
   });
 }
 
 async function recalculateCourseProgress(request: FastifyRequest, courseId: string) {
-  const [modules, completed] = await Promise.all([
-    request.server.prisma.module.findMany({
-      where: { courseId },
-      select: { lessons: { select: { id: true } } },
-    }),
-    request.server.prisma.lessonProgress.count({
-      where: {
-        memberId: request.memberId,
-        completed: true,
-        lesson: { module: { courseId } },
-      },
+  const [total, completed] = await Promise.all([
+    request.server.prisma.courseEpisode.count({ where: { courseId } }),
+    (request.server.prisma as any).courseEpisodeProgress.count({
+      where: { memberId: request.memberId, episode: { courseId }, completed: true },
     }),
   ]);
 
-  const total = modules.reduce((sum, m) => sum + m.lessons.length, 0);
   const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
 
   await request.server.prisma.courseEnrollment.updateMany({
@@ -711,35 +658,31 @@ export async function getUserNotificationsHandler(request: FastifyRequest, reply
   };
 
   const where: Record<string, unknown> = { memberId: request.memberId };
-  if (unread === 'true') where.isRead = false;
+  if (unread === 'true') where.readAt = null;
 
-  const [notifications, total] = await Promise.all([
-    request.server.prisma.notification.findMany({
+  const [recipients, total] = await Promise.all([
+    request.server.prisma.appNotificationRecipient.findMany({
       where: where as any,
-      orderBy: { sentAt: 'desc' },
+      orderBy: { notification: { createdAt: 'desc' } },
       take: Number(limit),
       skip: (Number(page) - 1) * Number(limit),
-      select: {
-        id: true,
-        title: true,
-        body: true,
-        type: true,
-        data: true,
-        isRead: true,
-        sentAt: true,
+      include: {
+        notification: {
+          select: { title: true, message: true, type: true, createdAt: true },
+        },
       },
     }),
-    request.server.prisma.notification.count({ where: where as any }),
+    request.server.prisma.appNotificationRecipient.count({ where: where as any }),
   ]);
 
-  const data = notifications.map((n) => ({
-    id: n.id,
-    title: n.title,
-    body: n.body,
-    type: n.type,
-    data: n.data as Record<string, unknown> | null,
-    isRead: n.isRead,
-    createdAt: n.sentAt,
+  const data = recipients.map((r) => ({
+    id: r.id,
+    title: r.notification.title,
+    body: r.notification.message,
+    type: r.notification.type,
+    data: null as null,
+    isRead: r.readAt !== null,
+    createdAt: r.notification.createdAt,
   }));
 
   return ok(reply, data, { total, page: Number(page), limit: Number(limit) });
@@ -748,24 +691,31 @@ export async function getUserNotificationsHandler(request: FastifyRequest, reply
 export async function markNotificationReadHandler(request: FastifyRequest, reply: FastifyReply) {
   const { id } = request.params as { id: string };
 
-  const notification = await request.server.prisma.notification.findFirst({
+  const recipient = await request.server.prisma.appNotificationRecipient.findFirst({
     where: { id, memberId: request.memberId },
   });
-  if (!notification) return fail(reply, 404, 'Notification not found');
+  if (!recipient) return fail(reply, 404, 'Notification not found');
 
-  const updated = await request.server.prisma.notification.update({
+  const updated = await request.server.prisma.appNotificationRecipient.update({
     where: { id },
-    data: { isRead: true },
-    select: { id: true, title: true, body: true, type: true, isRead: true, sentAt: true },
+    data: { readAt: new Date() },
+    include: { notification: { select: { title: true, message: true, type: true, createdAt: true } } },
   });
 
-  return ok(reply, { ...updated, createdAt: updated.sentAt });
+  return ok(reply, {
+    id: updated.id,
+    title: updated.notification.title,
+    body: updated.notification.message,
+    type: updated.notification.type,
+    isRead: true,
+    createdAt: updated.notification.createdAt,
+  });
 }
 
 export async function markAllNotificationsReadHandler(request: FastifyRequest, reply: FastifyReply) {
-  const result = await request.server.prisma.notification.updateMany({
-    where: { memberId: request.memberId, isRead: false },
-    data: { isRead: true },
+  const result = await request.server.prisma.appNotificationRecipient.updateMany({
+    where: { memberId: request.memberId, readAt: null },
+    data: { readAt: new Date() },
   });
 
   return ok(reply, { updated: result.count });
@@ -886,7 +836,7 @@ export async function getHomeSectionsHandler(request: FastifyRequest, reply: Fas
             select: {
               id: true,
               slug: true,
-              totalLessons: true,
+              _count: { select: { courseEpisodes: { where: { isVisible: true } } } },
               courseEpisodes: {
                 where: { isVisible: true },
                 orderBy: { order: 'asc' },
@@ -961,7 +911,7 @@ export async function getHomeSectionsHandler(request: FastifyRequest, reply: Fas
           workshopId: item.workshopId ?? null,
           episodeCount: workshopEpisodes.length > 0
             ? workshopEpisodes.length
-            : (item.course?.totalLessons ?? null),
+            : (item.course?._count?.courseEpisodes ?? null),
           episodes: workshopEpisodes.length > 0
             ? workshopEpisodes.map((ep: any) => ({
                 id: ep.id,
@@ -984,6 +934,54 @@ export async function getHomeSectionsHandler(request: FastifyRequest, reply: Fas
 }
 
 // ─── Workshops (user-facing) ──────────────────────────────────────────────────
+
+export async function listWorkshopsHandler(request: FastifyRequest, reply: FastifyReply) {
+  const [workshops, enrollments] = await Promise.all([
+    request.server.prisma.workshop.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        description: true,
+        thumbnailUrl: true,
+        deliveryMode: true,
+        requiredTier: true,
+        _count: { select: { challenges: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
+    request.server.prisma.workshopEnrollment.findMany({
+      where: { memberId: request.memberId },
+      select: { workshopId: true, status: true },
+    }),
+  ]);
+
+  const enrollmentMap = new Map(enrollments.map((e) => [e.workshopId, e.status]));
+
+  const data = workshops.map((w) => {
+    const enrollStatus = enrollmentMap.get(w.id) ?? null;
+    return {
+      id: w.id,
+      title: w.title,
+      slug: w.slug,
+      description: w.description ?? null,
+      thumbnailUrl: w.thumbnailUrl ?? null,
+      deliveryMode: w.deliveryMode,
+      deliveryModeLabel:
+        w.deliveryMode === 'online' ? 'Online'
+        : w.deliveryMode === 'offline' ? 'In-Person'
+        : 'Hybrid',
+      requiredTier: w.requiredTier,
+      challengeCount: w._count.challenges,
+      enrollmentStatus: enrollStatus,
+      enrolledBadge: enrollStatus === 'active' ? { label: 'Enrolled', color: '#22c55e' } : null,
+      completedBadgeIconType: enrollStatus === 'completed' ? 'checkmark' : null,
+    };
+  });
+
+  return ok(reply, data);
+}
 
 export async function getMyWorkshopsHandler(request: FastifyRequest, reply: FastifyReply) {
   const enrollments = await request.server.prisma.workshopEnrollment.findMany({
@@ -1733,4 +1731,149 @@ export async function sendMemberChatMessageHandler(request: FastifyRequest, repl
   request.server.io.to('admin').emit('chat:unread_ping', { conversationId: id });
 
   return reply.status(201).send({ success: true, data: { id: message.id }, error: null });
+}
+
+// ─── Workshop Challenges ──────────────────────────────────────────────────────
+
+export async function getWorkshopChallengesHandler(request: FastifyRequest, reply: FastifyReply) {
+  const { slug } = request.params as { slug: string };
+
+  const workshop = await request.server.prisma.workshop.findFirst({
+    where: { slug },
+    include: {
+      challenges: {
+        orderBy: { order: 'asc' },
+        include: {
+          episodes: {
+            orderBy: { order: 'asc' },
+            include: {
+              progress: { where: { memberId: request.memberId }, select: { isCompleted: true, lastWatchedSecs: true } },
+            },
+          },
+          memberProgress: {
+            where: { memberId: request.memberId },
+            select: { status: true, completedAt: true, answersData: true },
+          },
+        },
+      },
+    },
+  });
+
+  if (!workshop) return fail(reply, 404, 'Workshop not found');
+
+  const challenges = (workshop as any).challenges;
+
+  // First pass: compute status for each challenge
+  const statuses: string[] = challenges.map((ch: any) => {
+    if (!ch.type || ch.type === 'watch') {
+      const total = ch.episodes.length;
+      const done = ch.episodes.filter((e: any) => e.progress?.[0]?.isCompleted).length;
+      if (total === 0) return 'not_started';
+      if (done >= total) return 'completed';
+      if (done > 0) return 'in_progress';
+      return 'not_started';
+    }
+    return ch.memberProgress?.[0]?.status ?? 'not_started';
+  });
+
+  const result = challenges.map((ch: any, idx: number) => {
+    const allPrevCompleted = statuses.slice(0, idx).every((s) => s === 'completed');
+    const isLocked = idx > 0 && !allPrevCompleted;
+    const rawStatus = statuses[idx];
+    const status = isLocked ? 'locked' : rawStatus;
+
+    const totalEps = ch.episodes.length;
+    const doneEps = ch.episodes.filter((e: any) => e.progress?.[0]?.isCompleted).length;
+
+    return {
+      id: ch.id,
+      order: ch.order,
+      challengeNumber: ch.challengeNumber,
+      numberLabel: ch.numberLabel,
+      numberColor: ch.numberColor,
+      title: ch.title,
+      description: ch.description ?? null,
+      type: ch.type ?? 'watch',
+      quizData: ch.quizData ?? null,
+      status,
+      isLocked,
+      progressPercent: (!ch.type || ch.type === 'watch')
+        ? (totalEps > 0 ? Math.round((doneEps / totalEps) * 100) : 0)
+        : rawStatus === 'completed' ? 100 : rawStatus === 'in_progress' ? 30 : 0,
+      episodes: (!ch.type || ch.type === 'watch') ? ch.episodes.map((ep: any) => ({
+        id: ep.id,
+        order: ep.order,
+        title: ep.title,
+        description: ep.description ?? null,
+        typeLabel: ep.typeLabel,
+        videoUrl: ep.videoUrl ?? null,
+        durationLabel: ep.durationLabel ?? null,
+        durationSeconds: ep.durationSeconds ?? null,
+        isCompleted: ep.progress?.[0]?.isCompleted ?? false,
+        lastWatchedSecs: ep.progress?.[0]?.lastWatchedSecs ?? 0,
+      })) : [],
+      submission: ch.memberProgress?.[0] ?? null,
+    };
+  });
+
+  return ok(reply, { challenges: result });
+}
+
+export async function completeChallengeHandler(request: FastifyRequest, reply: FastifyReply) {
+  const { id } = request.params as { id: string };
+  const { answersData } = (request.body as any) ?? {};
+
+  const challenge = await request.server.prisma.challenge.findUnique({
+    where: { id },
+    select: { id: true, workshopId: true, order: true },
+  });
+  if (!challenge) return fail(reply, 404, 'Challenge not found');
+
+  // Sequential lock check
+  const prevChallenges = await request.server.prisma.challenge.findMany({
+    where: { workshopId: challenge.workshopId, order: { lt: challenge.order } },
+    select: { id: true, type: true, order: true },
+    orderBy: { order: 'asc' },
+  });
+
+  for (const prev of prevChallenges) {
+    if (!prev.type || prev.type === 'watch') {
+      const epIds = await request.server.prisma.workshopEpisode.findMany({ where: { challengeId: prev.id }, select: { id: true } });
+      const doneCount = await request.server.prisma.memberEpisodeProgress.count({ where: { memberId: request.memberId, episodeId: { in: epIds.map(e => e.id) }, isCompleted: true } });
+      if (doneCount < epIds.length) return fail(reply, 403, 'Complete previous challenges first');
+    } else {
+      const prevProgress = await (request.server.prisma as any).memberChallengeProgress.findFirst({
+        where: { memberId: request.memberId, challengeId: prev.id, status: 'completed' },
+      });
+      if (!prevProgress) return fail(reply, 403, 'Complete previous challenges first');
+    }
+  }
+
+  const now = new Date();
+  await (request.server.prisma as any).memberChallengeProgress.upsert({
+    where: { memberId_challengeId: { memberId: request.memberId, challengeId: id } },
+    create: { memberId: request.memberId, challengeId: id, status: 'completed', completedAt: now, answersData: answersData ?? null },
+    update: { status: 'completed', completedAt: now, answersData: answersData ?? null },
+  });
+
+  return ok(reply, { status: 'completed', completedAt: now.toISOString() });
+}
+
+export async function completeWorkshopEpisodeHandler(request: FastifyRequest, reply: FastifyReply) {
+  const { id } = request.params as { id: string };
+
+  const episode = await request.server.prisma.workshopEpisode.findUnique({
+    where: { id },
+    select: { id: true, challengeId: true },
+  });
+  if (!episode) return fail(reply, 404, 'Episode not found');
+
+  const now = new Date();
+  await request.server.prisma.memberEpisodeProgress.upsert({
+    where: { memberId_episodeId: { memberId: request.memberId, episodeId: id } },
+    create: { memberId: request.memberId, episodeId: id, isCompleted: true, completedAt: now, lastWatchedSecs: 0 },
+    update: { isCompleted: true, completedAt: now },
+  });
+
+  return ok(reply, { episodeId: id, isCompleted: true });
 }

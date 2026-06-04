@@ -1,13 +1,37 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Plus, Trash2, Pencil, X, Loader2, Tv2, AlertCircle, GripVertical, Eye, EyeOff, Save, Upload, Film, Image as ImageIcon, Volume2, VolumeX } from "lucide-react";
+import { Plus, Trash2, Pencil, X, Loader2, Tv2, AlertCircle, GripVertical, Eye, EyeOff, Save, Film, Image as ImageIcon, Volume2, VolumeX, Link2, Search } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { useListHeroSlides, useCreateHeroSlide, useUpdateHeroSlide, useDeleteHeroSlide, useReorderHeroSlides } from "@/lib/hooks/useTbt";
-import { useGetPresignedUrl } from "@/lib/hooks/useAdmin";
+import { useListHeroSlides, useCreateHeroSlide, useUpdateHeroSlide, useDeleteHeroSlide, useReorderHeroSlides, useListWorkshops, useListVodCourses, useListProducts, useListAppResources } from "@/lib/hooks/useTbt";
+import { useUploadImage } from "@/lib/hooks/useAdmin";
 import { toast } from "react-hot-toast";
 
-const CTA_TYPES = ["internal", "external"];
+type LinkType = "course" | "workshop" | "products" | "resources" | "custom";
+
+const LINK_TYPE_OPTIONS: { value: LinkType; label: string }[] = [
+  { value: "course", label: "Course" },
+  { value: "workshop", label: "Workshop" },
+  { value: "products", label: "Products Page" },
+  { value: "resources", label: "Resources Page" },
+  { value: "custom", label: "Custom URL" },
+];
+
+function detectLinkType(ctaUrl: string): { linkType: LinkType; linkedId: string } {
+  if (ctaUrl?.startsWith("/learning/")) return { linkType: "course", linkedId: ctaUrl.replace("/learning/", "") };
+  if (ctaUrl?.startsWith("/workshop/")) return { linkType: "workshop", linkedId: ctaUrl.replace("/workshop/", "") };
+  if (ctaUrl === "/Products") return { linkType: "products", linkedId: "" };
+  if (ctaUrl === "/Resources") return { linkType: "resources", linkedId: "" };
+  return { linkType: "custom", linkedId: "" };
+}
+
+function resolveCtaUrl(linkType: LinkType, linkedId: string, customUrl: string): { ctaUrl: string; ctaType: string } {
+  if (linkType === "course") return { ctaUrl: `/learning/${linkedId}`, ctaType: "internal" };
+  if (linkType === "workshop") return { ctaUrl: `/workshop/${linkedId}`, ctaType: "internal" };
+  if (linkType === "products") return { ctaUrl: "/Products", ctaType: "internal" };
+  if (linkType === "resources") return { ctaUrl: "/Resources", ctaType: "internal" };
+  return { ctaUrl: customUrl, ctaType: "internal" };
+}
 
 const EMPTY_FORM = {
   title: "",
@@ -16,8 +40,9 @@ const EMPTY_FORM = {
   bgImageUrl: "",
   bgMuteDefault: true,
   ctaLabel: "",
+  linkType: "custom" as LinkType,
+  linkedId: "",
   ctaUrl: "",
-  ctaType: "internal",
   badgeText: "",
   isActive: true,
 };
@@ -38,19 +63,13 @@ interface UploadBtnProps {
 
 function UploadBtn({ label, value, accept, icon, uploadKey, pathPrefix, uploading, setUploading, onUploaded }: UploadBtnProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const getPresignedUrl = useGetPresignedUrl();
+  const uploadImage = useUploadImage();
   const isUploading = uploading === uploadKey;
 
   const handleFile = async (file: File) => {
     try {
       setUploading(uploadKey);
-      const { uploadUrl, publicUrl } = await getPresignedUrl.mutateAsync({
-        filename: file.name,
-        contentType: file.type,
-        bucket: "hero-slides",
-        pathPrefix,
-      });
-      await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      const { publicUrl } = await uploadImage.mutateAsync({ file, pathPrefix });
       onUploaded(uploadKey, publicUrl);
       toast.success(`${label} uploaded`);
     } catch (e: any) {
@@ -97,6 +116,18 @@ export default function HeroCarouselPage() {
   const updateSlide = useUpdateHeroSlide();
   const deleteSlide = useDeleteHeroSlide();
   const reorderSlides = useReorderHeroSlides();
+
+  const { data: coursesData } = useListVodCourses({ limit: 200 });
+  const { data: workshopsData } = useListWorkshops({ limit: 200 });
+  const { data: productsData } = useListProducts();
+  const { data: resourcesData } = useListAppResources();
+
+  const courses: any[] = (coursesData as any)?.data || [];
+  const workshops: any[] = (workshopsData as any)?.data || [];
+  const products: any[] = (productsData as any)?.data || [];
+  const resources: any[] = (resourcesData as any)?.data || [];
+
+  const [itemSearch, setItemSearch] = useState("");
 
   const serverSlides: any[] = (data as any)?.data || [];
 
@@ -148,11 +179,13 @@ export default function HeroCarouselPage() {
 
   const openCreate = () => {
     setForm({ ...EMPTY_FORM });
+    setItemSearch("");
     setEditing(null);
     setShowForm(true);
   };
 
   const openEdit = (slide: any) => {
+    const { linkType, linkedId } = detectLinkType(slide.ctaUrl || "");
     setForm({
       title: slide.title || "",
       description: slide.description || "",
@@ -160,18 +193,23 @@ export default function HeroCarouselPage() {
       bgImageUrl: slide.bgImageUrl || "",
       bgMuteDefault: slide.bgMuteDefault ?? true,
       ctaLabel: slide.ctaLabel || "",
-      ctaUrl: slide.ctaUrl || "",
-      ctaType: slide.ctaType || "internal",
+      linkType,
+      linkedId,
+      ctaUrl: linkType === "custom" ? (slide.ctaUrl || "") : "",
       badgeText: slide.badgeText || "",
       isActive: slide.isActive ?? true,
     });
+    setItemSearch("");
     setEditing(slide);
     setShowForm(true);
   };
 
   const handleSave = async () => {
     if (!form.title.trim()) return toast.error("Title is required");
+    if ((form.linkType === "course" || form.linkType === "workshop") && !form.linkedId)
+      return toast.error("Please select a " + form.linkType);
     try {
+      const { ctaUrl, ctaType } = resolveCtaUrl(form.linkType, form.linkedId, form.ctaUrl);
       const payload = {
         title: form.title,
         description: form.description || null,
@@ -179,8 +217,8 @@ export default function HeroCarouselPage() {
         bgImageUrl: form.bgImageUrl || null,
         bgMuteDefault: form.bgMuteDefault,
         ctaLabel: form.ctaLabel || "",
-        ctaUrl: form.ctaUrl || "",
-        ctaType: form.ctaType,
+        ctaUrl,
+        ctaType,
         badgeText: form.badgeText || null,
         isActive: form.isActive,
       };
@@ -400,25 +438,124 @@ export default function HeroCarouselPage() {
               </div>
 
               {/* CTA */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[11px] font-bold text-[#606060] uppercase tracking-widest mb-2 font-rajdhani">CTA Label</label>
-                  <input value={form.ctaLabel} onChange={e => setField("ctaLabel", e.target.value)} placeholder="Get Started"
-                    className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg h-11 px-4 text-white outline-none focus:border-[#dc2626] transition-all text-sm" />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-[#606060] uppercase tracking-widest mb-2 font-rajdhani">CTA Type</label>
-                  <select value={form.ctaType} onChange={e => setField("ctaType", e.target.value)}
-                    className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg h-11 px-4 text-white outline-none focus:border-[#dc2626] transition-all text-sm appearance-none cursor-pointer">
-                    {CTA_TYPES.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
-                  </select>
-                </div>
+              <div>
+                <label className="block text-[11px] font-bold text-[#606060] uppercase tracking-widest mb-2 font-rajdhani">CTA Label</label>
+                <input value={form.ctaLabel} onChange={e => setField("ctaLabel", e.target.value)} placeholder="Get Started"
+                  className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg h-11 px-4 text-white outline-none focus:border-[#dc2626] transition-all text-sm" />
               </div>
 
-              <div>
-                <label className="block text-[11px] font-bold text-[#606060] uppercase tracking-widest mb-2 font-rajdhani">CTA URL</label>
-                <input value={form.ctaUrl} onChange={e => setField("ctaUrl", e.target.value)} placeholder="/courses"
-                  className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg h-11 px-4 text-white outline-none focus:border-[#dc2626] transition-all text-sm font-mono" />
+              {/* Link Target */}
+              <div className="border border-[#2a2a2a] rounded-xl p-4 space-y-3 bg-[#111]">
+                <div className="flex items-center gap-2 mb-1">
+                  <Link2 size={12} className="text-[#dc2626]" />
+                  <span className="text-[11px] font-bold text-[#606060] uppercase tracking-widest font-rajdhani">Button Link Target</span>
+                </div>
+
+                {/* Link type selector */}
+                <div className="grid grid-cols-5 gap-1.5">
+                  {LINK_TYPE_OPTIONS.map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => { setField("linkType", opt.value); setField("linkedId", ""); setItemSearch(""); }}
+                      className={`py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest font-rajdhani transition-all ${
+                        form.linkType === opt.value
+                          ? "bg-[#dc2626] text-white"
+                          : "bg-[#1a1a1a] border border-[#2a2a2a] text-[#606060] hover:text-white hover:border-[#444]"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Course picker */}
+                {form.linkType === "course" && (
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#444]" />
+                      <input
+                        value={itemSearch}
+                        onChange={e => setItemSearch(e.target.value)}
+                        placeholder="Search courses..."
+                        className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg h-9 pl-8 pr-3 text-white outline-none focus:border-[#dc2626] transition-all text-xs"
+                      />
+                    </div>
+                    <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
+                      {courses
+                        .filter(c => !itemSearch || c.title?.toLowerCase().includes(itemSearch.toLowerCase()))
+                        .map((c: any) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => { setField("linkedId", c.id); setItemSearch(""); }}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-all ${
+                              form.linkedId === c.id
+                                ? "bg-[#dc2626]/20 border border-[#dc2626]/40 text-white"
+                                : "bg-[#1a1a1a] border border-[#222] text-[#a0a0a0] hover:text-white hover:border-[#333]"
+                            }`}
+                          >
+                            {c.title}
+                          </button>
+                        ))}
+                      {courses.length === 0 && <p className="text-[11px] text-[#444] text-center py-2">No courses found</p>}
+                    </div>
+                    {form.linkedId && (
+                      <p className="text-[10px] text-[#dc2626] font-mono">→ /learning/{form.linkedId}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Workshop picker */}
+                {form.linkType === "workshop" && (
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#444]" />
+                      <input
+                        value={itemSearch}
+                        onChange={e => setItemSearch(e.target.value)}
+                        placeholder="Search workshops..."
+                        className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg h-9 pl-8 pr-3 text-white outline-none focus:border-[#dc2626] transition-all text-xs"
+                      />
+                    </div>
+                    <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
+                      {workshops
+                        .filter(w => !itemSearch || w.title?.toLowerCase().includes(itemSearch.toLowerCase()))
+                        .map((w: any) => (
+                          <button
+                            key={w.id}
+                            type="button"
+                            onClick={() => { setField("linkedId", w.slug); setItemSearch(""); }}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-all ${
+                              form.linkedId === w.slug
+                                ? "bg-[#dc2626]/20 border border-[#dc2626]/40 text-white"
+                                : "bg-[#1a1a1a] border border-[#222] text-[#a0a0a0] hover:text-white hover:border-[#333]"
+                            }`}
+                          >
+                            {w.title}
+                          </button>
+                        ))}
+                      {workshops.length === 0 && <p className="text-[11px] text-[#444] text-center py-2">No workshops found</p>}
+                    </div>
+                    {form.linkedId && (
+                      <p className="text-[10px] text-[#dc2626] font-mono">→ /workshop/{form.linkedId}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Products / Resources — no picker needed */}
+                {form.linkType === "products" && (
+                  <p className="text-[11px] text-[#606060] font-mono">→ /Products</p>
+                )}
+                {form.linkType === "resources" && (
+                  <p className="text-[11px] text-[#606060] font-mono">→ /Resources</p>
+                )}
+
+                {/* Custom URL */}
+                {form.linkType === "custom" && (
+                  <input value={form.ctaUrl} onChange={e => setField("ctaUrl", e.target.value)} placeholder="/your/custom/path"
+                    className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg h-9 px-3 text-white outline-none focus:border-[#dc2626] transition-all text-xs font-mono" />
+                )}
               </div>
 
               {/* Badge Text */}
