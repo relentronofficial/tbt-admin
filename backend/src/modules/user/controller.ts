@@ -1740,9 +1740,17 @@ export async function getWorkshopChallengesHandler(request: FastifyRequest, repl
 
   const workshop = await request.server.prisma.workshop.findFirst({
     where: { slug },
+    select: { id: true },
+  });
+  if (!workshop) return fail(reply, 404, 'Workshop not found');
+
+  // Use flow item order so admin drag-and-drop reordering is respected,
+  // and live calls are interleaved at the admin-configured position.
+  const flowItems = await request.server.prisma.workshopFlowItem.findMany({
+    where: { workshopId: workshop.id, type: { in: ['challenge_start', 'live_call'] } },
+    orderBy: { order: 'asc' },
     include: {
-      challenges: {
-        orderBy: { order: 'asc' },
+      challenge: {
         include: {
           episodes: {
             orderBy: { order: 'asc' },
@@ -1756,15 +1764,15 @@ export async function getWorkshopChallengesHandler(request: FastifyRequest, repl
           },
         },
       },
+      liveCall: true,
     },
   });
 
-  if (!workshop) return fail(reply, 404, 'Workshop not found');
-
-  const challenges = (workshop as any).challenges;
-
-  // First pass: compute status for each challenge
-  const statuses: string[] = challenges.map((ch: any) => {
+  // Pre-compute statuses for challenge items only (live calls don't block progress)
+  const challengeFlowItems = (flowItems as any[]).filter(fi => fi.type === 'challenge_start');
+  const challengeStatuses: string[] = challengeFlowItems.map(fi => {
+    const ch = fi.challenge;
+    if (!ch) return 'not_started';
     if (!ch.type || ch.type === 'watch') {
       const total = ch.episodes.length;
       const done = ch.episodes.filter((e: any) => e.progress?.[0]?.isCompleted).length;
@@ -1776,12 +1784,53 @@ export async function getWorkshopChallengesHandler(request: FastifyRequest, repl
     return ch.memberProgress?.[0]?.status ?? 'not_started';
   });
 
-  const result = challenges.map((ch: any, idx: number) => {
-    const allPrevCompleted = statuses.slice(0, idx).every((s) => s === 'completed');
-    const isLocked = idx > 0 && !allPrevCompleted;
-    const rawStatus = statuses[idx];
-    const status = isLocked ? 'locked' : rawStatus;
+  const now = new Date();
+  let challengeIdx = 0;
 
+  const result = (flowItems as any[]).map(fi => {
+    if (fi.type === 'live_call') {
+      const lc = fi.liveCall;
+      if (!lc) return null;
+      const scheduled = lc.scheduledAt ? new Date(lc.scheduledAt) : null;
+      const isPast = scheduled ? scheduled < now : false;
+      const unlockAt = scheduled && lc.liveUrlUnlocksMinutesBefore
+        ? new Date(scheduled.getTime() - lc.liveUrlUnlocksMinutesBefore * 60 * 1000)
+        : null;
+      const isUnlocked = unlockAt ? now >= unlockAt : !!lc.liveUrl;
+      return {
+        id: fi.id,
+        type: 'live_call',
+        liveCallId: lc.id,
+        label: lc.label ?? 'LIVE CALL:',
+        labelColor: lc.labelColor ?? '#ff3d8b',
+        title: lc.title,
+        scheduledAt: lc.scheduledAt?.toISOString() ?? null,
+        liveUrl: isUnlocked ? lc.liveUrl : null,
+        liveUrlUnlocksMinutesBefore: lc.liveUrlUnlocksMinutesBefore ?? 30,
+        facilitatorName: lc.facilitatorName ?? null,
+        facilitatorTitle: lc.facilitatorTitle ?? null,
+        stayTunedMessage: lc.stayTunedMessage ?? null,
+        stayTunedColor: lc.stayTunedColor ?? '#2dd4bf',
+        status: isPast ? 'past' : 'upcoming',
+        isLocked: false,
+        progressPercent: isPast ? 100 : 0,
+        numberLabel: null,
+        numberColor: null,
+        description: null,
+        quizData: null,
+        episodes: [],
+        submission: null,
+      };
+    }
+
+    // challenge_start
+    const ch = fi.challenge;
+    if (!ch) return null;
+    const idx = challengeIdx++;
+    const allPrevCompleted = challengeStatuses.slice(0, idx).every(s => s === 'completed');
+    const isLocked = idx > 0 && !allPrevCompleted;
+    const rawStatus = challengeStatuses[idx];
+    const status = isLocked ? 'locked' : rawStatus;
     const totalEps = ch.episodes.length;
     const doneEps = ch.episodes.filter((e: any) => e.progress?.[0]?.isCompleted).length;
 
@@ -1814,7 +1863,7 @@ export async function getWorkshopChallengesHandler(request: FastifyRequest, repl
       })) : [],
       submission: ch.memberProgress?.[0] ?? null,
     };
-  });
+  }).filter(Boolean);
 
   return ok(reply, { challenges: result });
 }
