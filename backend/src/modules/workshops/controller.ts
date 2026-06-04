@@ -102,15 +102,29 @@ export async function listEnrollmentsHandler(req: FastifyRequest, reply: Fastify
 export async function enrollMembersHandler(req: FastifyRequest, reply: FastifyReply) {
   const { id } = req.params as any;
   const { memberIds } = req.body as any;
-  const created = await req.server.prisma.$transaction(
-    memberIds.map((memberId: string) =>
-      req.server.prisma.workshopEnrollment.upsert({
-        where: { workshopId_memberId: { workshopId: id, memberId } },
-        update: { status: 'active' },
-        create: { workshopId: id, memberId, status: 'active' },
-      })
-    )
-  );
+
+  const [workshop, created] = await Promise.all([
+    req.server.prisma.workshop.findUnique({ where: { id }, select: { title: true } }),
+    req.server.prisma.$transaction(
+      memberIds.map((memberId: string) =>
+        req.server.prisma.workshopEnrollment.upsert({
+          where: { workshopId_memberId: { workshopId: id, memberId } },
+          update: { status: 'active' },
+          create: { workshopId: id, memberId, status: 'active' },
+        })
+      )
+    ),
+  ]);
+
+  if (workshop) {
+    memberIds.forEach((memberId: string) => {
+      req.server.io.to(`user:${memberId}`).emit('workshop:enrolled', {
+        workshopId: id,
+        workshopTitle: workshop.title,
+      });
+    });
+  }
+
   return reply.status(201).send({ success: true, data: created, error: null });
 }
 
@@ -126,7 +140,20 @@ export async function updateEnrollmentHandler(req: FastifyRequest, reply: Fastif
 
 export async function deleteEnrollmentHandler(req: FastifyRequest, reply: FastifyReply) {
   const { enrollmentId } = req.params as any;
+
+  const enrollment = await req.server.prisma.workshopEnrollment.findUnique({
+    where: { id: enrollmentId },
+    select: { memberId: true, workshopId: true },
+  });
+
   await req.server.prisma.workshopEnrollment.delete({ where: { id: enrollmentId } });
+
+  if (enrollment) {
+    req.server.io.to(`user:${enrollment.memberId}`).emit('workshop:removed', {
+      workshopId: enrollment.workshopId,
+    });
+  }
+
   return reply.send({ success: true, data: null, error: null });
 }
 

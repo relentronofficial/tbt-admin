@@ -112,6 +112,11 @@ enum SenderType {
   admin
 }
 
+enum ConversationStatus {
+  open
+  closed
+}
+
 enum Gender {
   male
   female
@@ -300,6 +305,8 @@ model Member {
   qaPosts                   QAPost[]
   qaReplies                 QAReply[]
   appNotifications          AppNotificationRecipient[]
+  directMessages            DirectMessage[]
+  conversations             Conversation[]
 
   @@map("members")
 }
@@ -850,6 +857,40 @@ model Notification {
   @@map("notifications")
 }
 
+model DirectMessage {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String?        @map("conversation_id") @db.Uuid
+  memberId       String         @map("member_id") @db.Uuid
+  senderId       String         @map("sender_id") @db.Uuid
+  senderType     SenderType     @map("sender_type")
+  subject        String?
+  body           String
+  isRead         Boolean        @default(false) @map("is_read")
+  readAt         DateTime?      @map("read_at") @db.Timestamptz(6)
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  conversation   Conversation?  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  member         Member         @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@map("direct_messages")
+}
+
+model Conversation {
+  id                String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  memberId          String             @map("member_id") @db.Uuid
+  subject           String
+  status            ConversationStatus @default(open)
+  memberUnreadCount Int                @default(0) @map("member_unread_count")
+  adminUnreadCount  Int                @default(0) @map("admin_unread_count")
+  lastMessageAt     DateTime           @default(now()) @map("last_message_at") @db.Timestamptz(6)
+  createdAt         DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  member            Member             @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  messages          DirectMessage[]
+
+  @@map("conversations")
+}
+
 model NotificationTemplate {
   id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   eventType     String   @unique @map("event_type")
@@ -1339,8 +1380,10 @@ model ContentItem {
   order         Int            @default(0)
   isVisible     Boolean        @default(true) @map("is_visible")
   courseId      String?        @map("course_id") @db.Uuid
+  workshopId    String?        @map("workshop_id") @db.Uuid
   section       ContentSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   course        Course?        @relation(fields: [courseId], references: [id])
+  workshop      Workshop?      @relation(fields: [workshopId], references: [id])
   createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -1371,6 +1414,7 @@ model Workshop {
   liveCalls    LiveCall[]
   flowItems    WorkshopFlowItem[]
   qaPosts      QAPost[]
+  contentItems ContentItem[]
   createdAt    DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -1695,6 +1739,19 @@ model UiStrings {
   resourcesDownloadLabel         String   @default("Download") @map("resources_download_label")
   paginationPrevLabel            String   @default("Previous") @map("pagination_prev_label")
   paginationNextLabel            String   @default("Next") @map("pagination_next_label")
+  messagesPageTitle              String   @default("Messages") @map("messages_page_title")
+  messagesUnreadSuffix           String   @default("unread") @map("messages_unread_suffix")
+  messagesMarkAllLabel           String   @default("Mark all read") @map("messages_mark_all_label")
+  messagesEmptyTitle             String   @default("No messages yet") @map("messages_empty_title")
+  messagesEmptyDesc              String   @default("Messages from your team will appear here.") @map("messages_empty_desc")
+  chatPageTitle                  String   @default("Chat")                                       @map("chat_page_title")
+  chatNewLabel                   String   @default("New Conversation")                           @map("chat_new_label")
+  chatSubjectLabel               String   @default("Subject")                                    @map("chat_subject_label")
+  chatTypingText                 String   @default("is typing...")                               @map("chat_typing_text")
+  chatClosedLabel                String   @default("This conversation has been closed.")         @map("chat_closed_label")
+  chatEmptyTitle                 String   @default("No conversations yet")                       @map("chat_empty_title")
+  chatEmptyDesc                  String   @default("Start a conversation with the TBT team.")    @map("chat_empty_desc")
+  chatSelectPrompt               String   @default("Select a conversation or start a new one.")  @map("chat_select_prompt")
   createdAt                      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 

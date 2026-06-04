@@ -11,7 +11,7 @@ import {
   useDeleteContentSection, useReorderContentSections,
   useContentSectionItems, useCreateContentItem, useUpdateContentItem,
   useDeleteContentItem, useReorderContentItems,
-  useListVodCourses,
+  useListVodCourses, useListWorkshops,
 } from "@/lib/hooks/useTbt";
 import { useGetPresignedUrl } from "@/lib/hooks/useAdmin";
 import { toast } from "react-hot-toast";
@@ -19,9 +19,13 @@ import { toast } from "react-hot-toast";
 const CONTENT_TYPES = ["series", "standalone", "podcast"];
 
 const EMPTY_SECTION = { title: "", slug: "", requiredTier: "", lockBadgeText: "", isVisible: true };
+const LINK_TYPES = ["workshop", "course", "external", "none"] as const;
+type LinkType = typeof LINK_TYPES[number];
+
 const EMPTY_ITEM = {
   title: "", thumbnailUrl: "", requiredTier: "", lockBadgeText: "",
-  contentType: "series", categoryTag: "", playUrl: "", isVisible: true, courseId: "",
+  contentType: "series", categoryTag: "", playUrl: "", isVisible: true,
+  courseId: "", workshopId: "", linkType: "none" as LinkType,
 };
 
 // ── Slug generator ────────────────────────────────────────────────────
@@ -170,9 +174,11 @@ export default function ContentSectionsPage() {
   const [deletingItem, setDeletingItem] = useState<string | null>(null);
   const [itemForm, setItemForm] = useState<any>(EMPTY_ITEM);
 
-  // Courses for dropdown
+  // Courses and workshops for dropdowns
   const { data: coursesData } = useListVodCourses({ limit: 200 });
   const courses: any[] = (coursesData as any)?.data || [];
+  const { data: workshopsData } = useListWorkshops({ limit: 200 });
+  const workshops: any[] = (workshopsData as any)?.data || [];
 
   // Item DnD
   const itemDragIdx = useRef<number | null>(null);
@@ -204,27 +210,32 @@ export default function ContentSectionsPage() {
 
   const openCreateItem = () => { setItemForm(EMPTY_ITEM); setEditingItem(null); setShowItemForm(true); };
   const openEditItem = (item: any) => {
+    const linkType: LinkType = item.workshopId ? "workshop" : item.courseId ? "course" : item.playUrl ? "external" : "none";
     setItemForm({
       title: item.title || "", thumbnailUrl: item.thumbnailUrl || "",
       requiredTier: String(item.requiredTier ?? ""), lockBadgeText: item.lockBadgeText || "",
       contentType: item.contentType || "series", categoryTag: item.categoryTag || "",
-      playUrl: item.playUrl || "", isVisible: item.isVisible ?? true, courseId: item.courseId || "",
+      playUrl: item.playUrl || "", isVisible: item.isVisible ?? true,
+      courseId: item.courseId || "", workshopId: item.workshopId || "", linkType,
     });
     setEditingItem(item); setShowItemForm(true);
   };
 
   const handleSaveItem = async () => {
     if (!itemForm.title.trim() || !selectedSection) return toast.error("Title is required");
+    if (itemForm.linkType === "workshop" && !itemForm.workshopId) return toast.error("Select a workshop");
+    if (itemForm.linkType === "course" && !itemForm.courseId) return toast.error("Select a course");
     try {
       const payload: any = {
         title: itemForm.title.trim(),
         thumbnailUrl: itemForm.thumbnailUrl || null,
         contentType: itemForm.contentType,
         categoryTag: itemForm.categoryTag || null,
-        playUrl: itemForm.playUrl || null,
         lockBadgeText: itemForm.lockBadgeText || null,
         isVisible: itemForm.isVisible,
-        courseId: itemForm.courseId || null,
+        workshopId: itemForm.linkType === "workshop" ? (itemForm.workshopId || null) : null,
+        courseId: itemForm.linkType === "course" ? (itemForm.courseId || null) : null,
+        playUrl: itemForm.linkType === "external" ? (itemForm.playUrl || null) : null,
       };
       if (itemForm.requiredTier) payload.requiredTier = Number(itemForm.requiredTier);
       if (editingItem) { await updateItem.mutateAsync({ id: editingItem.id, data: payload }); toast.success("Item updated"); }
@@ -386,7 +397,9 @@ export default function ContentSectionsPage() {
                             <span className="text-[10px] text-[#dc2626] uppercase font-rajdhani font-bold">{item.contentType}</span>
                             {item.categoryTag && <span className="text-[10px] text-[#606060] flex items-center gap-0.5"><Tag size={9} />{item.categoryTag}</span>}
                             {item.requiredTier > 0 && <span className="text-[10px] text-[#606060] bg-[#1a1a1a] border border-[#333] px-1.5 py-0.5 rounded font-rajdhani font-bold">T{item.requiredTier}</span>}
+                            {item.workshopId && <span className="text-[10px] text-purple-400 flex items-center gap-0.5"><Link2 size={9} />Workshop</span>}
                             {item.courseId && <span className="text-[10px] text-blue-400 flex items-center gap-0.5"><Link2 size={9} />Course</span>}
+                            {!item.workshopId && !item.courseId && item.playUrl && <span className="text-[10px] text-yellow-400 flex items-center gap-0.5"><Link2 size={9} />External</span>}
                             {!item.isVisible && <EyeOff size={10} className="text-[#444]" />}
                           </div>
                         </div>
@@ -507,24 +520,76 @@ export default function ContentSectionsPage() {
                 </div>
               </div>
 
-              {/* Play URL */}
+              {/* Link Type */}
               <div>
-                <label className="block text-[11px] font-bold text-[#606060] uppercase tracking-widest mb-2 font-rajdhani">Play URL</label>
-                <input value={itemForm.playUrl} onChange={e => setItemField("playUrl", e.target.value)} placeholder="https://..."
-                  className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg h-11 px-4 text-white outline-none focus:border-[#dc2626] transition-all text-sm font-mono" />
+                <label className="block text-[11px] font-bold text-[#606060] uppercase tracking-widest mb-2 font-rajdhani">Link Type</label>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {(["workshop", "course", "external", "none"] as LinkType[]).map(t => (
+                    <button key={t} type="button"
+                      onClick={() => {
+                        setItemField("linkType", t);
+                        if (t !== "workshop") setItemField("workshopId", "");
+                        if (t !== "course") setItemField("courseId", "");
+                        if (t !== "external") setItemField("playUrl", "");
+                      }}
+                      className={`py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest font-rajdhani border transition-all
+                        ${itemForm.linkType === t
+                          ? "bg-[#dc2626]/20 border-[#dc2626] text-[#dc2626]"
+                          : "bg-[#1a1a1a] border-[#2a2a2a] text-[#606060] hover:border-[#444]"}`}>
+                      {t}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              {/* Link to Course */}
-              <div>
-                <label className="block text-[11px] font-bold text-[#606060] uppercase tracking-widest mb-2 font-rajdhani">
-                  Link to Course <span className="text-[#444] normal-case tracking-normal">(overrides Play URL)</span>
-                </label>
-                <select value={itemForm.courseId} onChange={e => setItemField("courseId", e.target.value)}
-                  className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg h-11 px-4 text-white outline-none focus:border-[#dc2626] transition-all text-sm appearance-none cursor-pointer">
-                  <option value="">— No course —</option>
-                  {courses.map((c: any) => <option key={c.id} value={c.id}>{c.title}</option>)}
-                </select>
-              </div>
+              {/* Workshop dropdown */}
+              {itemForm.linkType === "workshop" && (
+                <div>
+                  <label className="block text-[11px] font-bold text-[#606060] uppercase tracking-widest mb-2 font-rajdhani">Workshop *</label>
+                  <select value={itemForm.workshopId}
+                    onChange={e => {
+                      const ws = workshops.find((w: any) => w.id === e.target.value);
+                      setItemField("workshopId", e.target.value);
+                      if (ws) {
+                        if (!itemForm.title) setItemField("title", ws.title);
+                        if (!itemForm.thumbnailUrl && ws.thumbnailUrl) setItemField("thumbnailUrl", ws.thumbnailUrl);
+                      }
+                    }}
+                    className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg h-11 px-4 text-white outline-none focus:border-[#dc2626] transition-all text-sm appearance-none cursor-pointer">
+                    <option value="">— Select workshop —</option>
+                    {workshops.map((w: any) => <option key={w.id} value={w.id}>{w.title}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {/* Course dropdown */}
+              {itemForm.linkType === "course" && (
+                <div>
+                  <label className="block text-[11px] font-bold text-[#606060] uppercase tracking-widest mb-2 font-rajdhani">Course *</label>
+                  <select value={itemForm.courseId}
+                    onChange={e => {
+                      const c = courses.find((c: any) => c.id === e.target.value);
+                      setItemField("courseId", e.target.value);
+                      if (c) {
+                        if (!itemForm.title) setItemField("title", c.title);
+                        if (!itemForm.thumbnailUrl && c.thumbnailUrl) setItemField("thumbnailUrl", c.thumbnailUrl);
+                      }
+                    }}
+                    className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg h-11 px-4 text-white outline-none focus:border-[#dc2626] transition-all text-sm appearance-none cursor-pointer">
+                    <option value="">— Select course —</option>
+                    {courses.map((c: any) => <option key={c.id} value={c.id}>{c.title}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {/* External URL */}
+              {itemForm.linkType === "external" && (
+                <div>
+                  <label className="block text-[11px] font-bold text-[#606060] uppercase tracking-widest mb-2 font-rajdhani">External URL *</label>
+                  <input value={itemForm.playUrl} onChange={e => setItemField("playUrl", e.target.value)} placeholder="https://..."
+                    className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg h-11 px-4 text-white outline-none focus:border-[#dc2626] transition-all text-sm font-mono" />
+                </div>
+              )}
 
               {/* Visible toggle */}
               <div className="flex items-center gap-3 pt-1">

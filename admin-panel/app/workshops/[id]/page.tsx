@@ -357,7 +357,10 @@ export default function WorkshopDetailPage() {
   const handleSaveEpisode = async () => {
     if (!episodeForm.title) return toast.error("Title is required");
     try {
-      const epData: any = { title: episodeForm.title, type: episodeForm.type, typeLabel: episodeForm.typeLabel || null, videoUrl: episodeForm.videoUrl || null, lockIconType: episodeForm.lockIconType, completedIconType: episodeForm.completedIconType };
+      const normalizedVideoUrl = episodeForm.videoUrl
+        ? episodeForm.videoUrl.replace(/https?:\/\/player\.mediadelivery\.net\/play\/(\d+)\/([\w-]+)/, 'https://iframe.mediadelivery.net/embed/$1/$2')
+        : null;
+      const epData: any = { title: episodeForm.title, type: episodeForm.type, typeLabel: episodeForm.typeLabel || null, videoUrl: normalizedVideoUrl, lockIconType: episodeForm.lockIconType, completedIconType: episodeForm.completedIconType };
       if (episodeForm.durationSeconds) epData.durationSeconds = Number(episodeForm.durationSeconds);
       if (episodeForm.bunnyVideoId) epData.bunnyVideoId = episodeForm.bunnyVideoId;
       if (editingEpisode) { await updateEpisode.mutateAsync({ id: editingEpisode.id, data: epData }); toast.success("Episode updated"); }

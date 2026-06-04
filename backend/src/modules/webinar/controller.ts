@@ -56,8 +56,23 @@ export async function startWebinarHandler(request: FastifyRequest, reply: Fastif
   const { id } = request.params as { id: string };
   const webinar = await request.server.prisma.webinar.update({
     where: { id },
-    data: { status: 'Live' }
+    data: { status: 'live' as any },
+    include: { registrations: { select: { memberId: true } } },
   });
+
+  request.server.io.to(`live:${id}`).emit('live:started', {
+    webinarId: id,
+    streamUrl: webinar.meetingUrl ?? null,
+    startedAt: new Date().toISOString(),
+  });
+
+  webinar.registrations.forEach(({ memberId }) => {
+    request.server.io.to(`user:${memberId}`).emit('live:reminder', {
+      webinarId: id,
+      title: webinar.title,
+    });
+  });
+
   return reply.send({ success: true, data: webinar, error: null });
 }
 
@@ -65,8 +80,14 @@ export async function endWebinarHandler(request: FastifyRequest, reply: FastifyR
   const { id } = request.params as { id: string };
   const webinar = await request.server.prisma.webinar.update({
     where: { id },
-    data: { status: 'Ended' }
+    data: { status: 'ended' as any },
   });
+
+  request.server.io.to(`live:${id}`).emit('live:ended', {
+    webinarId: id,
+    recordingUrl: webinar.recordingUrl ?? null,
+  });
+
   return reply.send({ success: true, data: webinar, error: null });
 }
 

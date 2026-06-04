@@ -5,9 +5,11 @@ import { Toaster } from "react-hot-toast";
 import { useState, useEffect } from "react";
 import { useAuth } from "@clerk/nextjs";
 import apiClient from "../lib/api/apiClient";
+import { initAdminSocket } from "@/lib/socket/client";
 
 function AuthInterceptor() {
   const { getToken, isLoaded } = useAuth();
+  initAdminSocket(() => getToken());
 
   useEffect(() => {
     if (!isLoaded) return;

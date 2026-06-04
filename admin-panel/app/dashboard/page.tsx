@@ -1,15 +1,19 @@
 "use client";
 
+import { useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { 
-  Users, 
-  TrendingUp, 
-  BookOpen, 
-  Video, 
+import {
+  Users,
+  TrendingUp,
+  BookOpen,
+  Video,
   ShieldCheck,
   Calendar,
   MessageSquare
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import toast from "react-hot-toast";
+import { getAdminSocket } from "@/lib/socket/client";
 import { cn } from "@/lib/utils";
 
 const stats = [
@@ -20,6 +24,23 @@ const stats = [
 ];
 
 export default function DashboardPage() {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    let mounted = true;
+    getAdminSocket().then((socket) => {
+      if (!mounted) return;
+      socket.on('admin:member_joined', (data: { memberId: string; fullName: string; createdAt: string }) => {
+        queryClient.invalidateQueries({ queryKey: ['dashboard', 'stats'] });
+        toast.success(`New member joined: ${data.fullName}`);
+      });
+    });
+    return () => {
+      mounted = false;
+      getAdminSocket().then((s) => s.off('admin:member_joined'));
+    };
+  }, [queryClient]);
+
   return (
     <DashboardLayout>
       <div className="space-y-6">

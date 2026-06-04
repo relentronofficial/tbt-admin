@@ -189,3 +189,55 @@ export const useDeleteBunnyVideo = () => {
     },
   });
 };
+
+export const useSendDirectMessage = () => {
+  return useMutation({
+    mutationFn: async (payload: { memberId: string; subject: string; body: string }) => {
+      const res: any = await apiClient.post('/api/messages/send', payload);
+      return res.data || res;
+    },
+  });
+};
+
+export const useAdminConversations = () => {
+  return useQuery({
+    queryKey: ['admin', 'conversations'],
+    queryFn: async () => {
+      const res: any = await apiClient.get('/api/conversations');
+      return res;
+    },
+  });
+};
+
+export const useAdminConversationMessages = (id: string | null) => {
+  return useQuery({
+    queryKey: ['admin', 'conversations', id, 'messages'],
+    queryFn: async () => {
+      const res: any = await apiClient.get(`/api/conversations/${id}/messages`);
+      return res;
+    },
+    enabled: !!id,
+  });
+};
+
+export const useSendAdminChatMessage = () => {
+  return useMutation({
+    mutationFn: async ({ conversationId, body }: { conversationId: string; body: string }) => {
+      const res: any = await apiClient.post(`/api/conversations/${conversationId}/messages`, { body });
+      return res.data || res;
+    },
+  });
+};
+
+export const useCloseConversation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res: any = await apiClient.patch(`/api/conversations/${id}/close`);
+      return res.data || res;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'conversations'] });
+    },
+  });
+};

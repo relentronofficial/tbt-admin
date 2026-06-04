@@ -122,6 +122,12 @@ export async function createMemberHandler(request: FastifyRequest, reply: Fastif
       throw prismaErr;
     }
 
+    request.server.io.to('admin').emit('admin:member_joined', {
+      memberId: member.id,
+      fullName: member.firstName + ' ' + (member.lastName ?? ''),
+      createdAt: member.createdAt,
+    });
+
     return reply.status(201).send({ success: true, data: member, error: null });
   } catch (err: any) {
     if (err.name === 'ZodError') {

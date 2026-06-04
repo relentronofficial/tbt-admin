@@ -38,6 +38,8 @@ const envSchema = z.object({
   TWILIO_PHONE_NUMBER: z.string().optional().or(z.literal('')),
   SENTRY_DSN: z.string().url().optional().or(z.literal('')),
   BETTER_STACK_SOURCE_TOKEN: z.string().optional().or(z.literal('')),
+  USER_WEB_URL: z.string().url().default('http://localhost:3001'),
+  ADMIN_WEB_URL: z.string().url().default('http://localhost:3000'),
 });
 
 const _env = envSchema.safeParse(process.env);

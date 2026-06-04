@@ -5,6 +5,22 @@ import { env } from '../config/env.js';
 
 const clerkClient = createClerkClient({ secretKey: env.CLERK_SECRET_KEY });
 
+// In-memory cache: clerkId → { memberId, status } for 5 minutes.
+// Eliminates a Supabase round-trip on every authenticated request.
+const _memberCache = new Map<string, { memberId: string; status: string; expiresAt: number }>();
+const MEMBER_CACHE_TTL = 5 * 60 * 1000;
+
+function getCachedMember(clerkId: string) {
+  const entry = _memberCache.get(clerkId);
+  if (entry && Date.now() < entry.expiresAt) return entry;
+  _memberCache.delete(clerkId);
+  return null;
+}
+
+function setCachedMember(clerkId: string, memberId: string, status: string) {
+  _memberCache.set(clerkId, { memberId, status, expiresAt: Date.now() + MEMBER_CACHE_TTL });
+}
+
 // Shared JWT extraction + verification logic used by both decorators.
 async function extractAndVerifyClerkToken(
   request: FastifyRequest,
@@ -61,6 +77,17 @@ async function clerkPlugin(fastify: FastifyInstance, _opts: FastifyPluginOptions
       const clerkId = await extractAndVerifyClerkToken(request, reply);
       if (!clerkId) return;
 
+      // Fast path: serve from in-memory cache (avoids DB round-trip per request).
+      const cached = getCachedMember(clerkId);
+      if (cached) {
+        if (cached.status !== 'active') {
+          return reply.status(403).send({ success: false, data: null, error: `Forbidden: Account is ${cached.status}` });
+        }
+        request.user = clerkId;
+        request.memberId = cached.memberId;
+        return;
+      }
+
       // Look up the Member record linked to this Clerk user.
       const member = await fastify.prisma.member.findFirst({
         where: { clerkId } as any,
@@ -68,11 +95,45 @@ async function clerkPlugin(fastify: FastifyInstance, _opts: FastifyPluginOptions
       });
 
       if (!member) {
-        return reply.status(401).send({
-          success: false,
-          data: null,
-          error: 'Unauthorized: No member account linked to this Clerk user',
-        });
+        // First sign-in: auto-create the Member record from Clerk profile.
+        let clerkUser: any = null;
+        try {
+          clerkUser = await fastify.clerk.users.getUser(clerkId);
+        } catch { /* use fallback values below */ }
+
+        const email     = clerkUser?.emailAddresses?.[0]?.emailAddress ?? `${clerkId}@unknown.tbt`;
+        const firstName = clerkUser?.firstName ?? email.split('@')[0] ?? 'Member';
+        const lastName  = clerkUser?.lastName ?? '';
+        const phone     = clerkUser?.phoneNumbers?.[0]?.phoneNumber || `clerk:${clerkId}`;
+        const memberId  = `TBT-${Math.floor(1000 + Math.random() * 9000)}`;
+
+        try {
+          const created = await fastify.prisma.member.create({
+            data: { clerkId, memberId, firstName, lastName, email, phone } as any,
+            select: { id: true, status: true },
+          });
+          // Give new members a 1-year active subscription so they can access the platform
+          await fastify.prisma.subscription.create({
+            data: {
+              memberId: created.id,
+              plan: 'premium',
+              status: 'active',
+              startsAt: new Date(),
+              endsAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+              amount: 0,
+            } as any,
+          }).catch(() => { /* non-fatal */ });
+          setCachedMember(clerkId, created.id, (created as any).status ?? 'active');
+          request.user = clerkId;
+          request.memberId = created.id;
+          return;
+        } catch {
+          return reply.status(401).send({
+            success: false,
+            data: null,
+            error: 'Unauthorized: Could not provision member account',
+          });
+        }
       }
 
       if (member.status !== 'active') {
@@ -83,6 +144,7 @@ async function clerkPlugin(fastify: FastifyInstance, _opts: FastifyPluginOptions
         });
       }
 
+      setCachedMember(clerkId, member.id, member.status);
       request.user = clerkId;
       request.memberId = member.id;
     } catch (error: any) {

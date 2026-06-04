@@ -45,6 +45,10 @@ export async function listItemsHandler(req: FastifyRequest, reply: FastifyReply)
   const items = await req.server.prisma.contentItem.findMany({
     where: { sectionId: id },
     orderBy: { order: 'asc' },
+    include: {
+      course: { select: { id: true, title: true, thumbnailUrl: true, slug: true } },
+      workshop: { select: { id: true, title: true, thumbnailUrl: true, slug: true } },
+    },
   });
   return reply.send({ success: true, data: items, error: null });
 }

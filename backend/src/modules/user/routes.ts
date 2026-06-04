@@ -19,6 +19,9 @@ import {
   getUserNotificationsHandler,
   markNotificationReadHandler,
   markAllNotificationsReadHandler,
+  getUserMessagesHandler,
+  markMessageReadHandler,
+  markAllMessagesReadHandler,
   getHomeHeroHandler,
   getHomeSectionsHandler,
   getMyWorkshopsHandler,
@@ -33,6 +36,10 @@ import {
   postEpisodeProgressHandler,
   getUserProductsHandler,
   getUserResourcesHandler,
+  startConversationHandler,
+  listMemberConversationsHandler,
+  getMemberConversationMessagesHandler,
+  sendMemberChatMessageHandler,
 } from './controller.js';
 
 export async function userRoutes(fastify: FastifyInstance) {
@@ -72,6 +79,11 @@ export async function userRoutes(fastify: FastifyInstance) {
   fastify.patch('/notifications/:id/read', markNotificationReadHandler);
   fastify.post('/notifications/read-all', markAllNotificationsReadHandler);
 
+  // ── Messages ──────────────────────────────────────────────────────────────
+  fastify.get('/messages', getUserMessagesHandler);
+  fastify.patch('/messages/:id/read', markMessageReadHandler);
+  fastify.post('/messages/read-all', markAllMessagesReadHandler);
+
   // ── Home ──────────────────────────────────────────────────────────────────
   fastify.get('/home/hero', getHomeHeroHandler);
   fastify.get('/home/sections', getHomeSectionsHandler);
@@ -93,4 +105,10 @@ export async function userRoutes(fastify: FastifyInstance) {
   // ── Products & Resources ──────────────────────────────────────────────────
   fastify.get('/products', getUserProductsHandler);
   fastify.get('/resources', getUserResourcesHandler);
+
+  // ── Conversations (live chat) ─────────────────────────────────────────────
+  fastify.post('/conversations',                      startConversationHandler);
+  fastify.get('/conversations',                       listMemberConversationsHandler);
+  fastify.get('/conversations/:id/messages',          getMemberConversationMessagesHandler);
+  fastify.post('/conversations/:id/messages',         sendMemberChatMessageHandler);
 }

@@ -361,7 +361,10 @@ function EpisodesPanel({ course, onClose }: { course: any; onClose: () => void }
 
   const handleSaveEp = async () => {
     if (!epForm.title.trim() || !epForm.videoUrl.trim()) return toast.error("Title and video are required");
-    const payload = { ...epForm, durationSeconds: Number(epForm.durationSeconds) || 0, bunnyVideoId: epForm.bunnyVideoId || undefined };
+    const normalizedVideoUrl = epForm.videoUrl
+      ? epForm.videoUrl.replace(/https?:\/\/player\.mediadelivery\.net\/play\/(\d+)\/([\w-]+)/, 'https://iframe.mediadelivery.net/embed/$1/$2')
+      : epForm.videoUrl;
+    const payload = { ...epForm, videoUrl: normalizedVideoUrl, durationSeconds: Number(epForm.durationSeconds) || 0, bunnyVideoId: epForm.bunnyVideoId || undefined };
     try {
       if (editingEp) { await updateEp.mutateAsync({ id: editingEp.id, data: payload }); toast.success("Episode updated"); }
       else { await createEp.mutateAsync(payload); toast.success("Episode created"); }

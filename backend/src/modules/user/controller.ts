@@ -771,6 +771,73 @@ export async function markAllNotificationsReadHandler(request: FastifyRequest, r
   return ok(reply, { updated: result.count });
 }
 
+// ─── Messages ────────────────────────────────────────────────────────────────
+
+export async function getUserMessagesHandler(request: FastifyRequest, reply: FastifyReply) {
+  const { page = 1, limit = 20, unread } = request.query as {
+    page?: number; limit?: number; unread?: boolean;
+  };
+  const skip = (Number(page) - 1) * Number(limit);
+  const where = {
+    memberId: request.memberId,
+    ...(unread ? { isRead: false } : {}),
+  };
+
+  const [messages, total] = await Promise.all([
+    request.server.prisma.directMessage.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: Number(limit),
+    }),
+    request.server.prisma.directMessage.count({ where }),
+  ]);
+
+  // Batch-resolve admin senders to avoid N+1
+  const adminIds = [...new Set(
+    messages.filter(m => m.senderType === 'admin').map(m => m.senderId)
+  )];
+  const admins = adminIds.length > 0
+    ? await request.server.prisma.admin.findMany({
+        where: { id: { in: adminIds } },
+        select: { id: true, fullName: true, profilePhotoUrl: true },
+      })
+    : [];
+  const adminMap = Object.fromEntries(admins.map(a => [a.id, a]));
+
+  const data = messages.map(m => {
+    const sender = m.senderType === 'admin' ? adminMap[m.senderId] : null;
+    return {
+      id:              m.id,
+      subject:         m.subject,
+      body:            m.body,
+      senderName:      sender?.fullName ?? 'TBT Team',
+      senderAvatarUrl: sender?.profilePhotoUrl ?? null,
+      isRead:          m.isRead,
+      createdAt:       m.createdAt,
+    };
+  });
+
+  return ok(reply, data, { total, page: Number(page), limit: Number(limit) });
+}
+
+export async function markMessageReadHandler(request: FastifyRequest, reply: FastifyReply) {
+  const { id } = request.params as { id: string };
+  await request.server.prisma.directMessage.updateMany({
+    where: { id, memberId: request.memberId },
+    data:  { isRead: true, readAt: new Date() },
+  });
+  return ok(reply, { id, isRead: true });
+}
+
+export async function markAllMessagesReadHandler(request: FastifyRequest, reply: FastifyReply) {
+  const result = await request.server.prisma.directMessage.updateMany({
+    where: { memberId: request.memberId, isRead: false },
+    data:  { isRead: true, readAt: new Date() },
+  });
+  return ok(reply, { updated: result.count });
+}
+
 // ─── Home ─────────────────────────────────────────────────────────────────────
 
 export async function getHomeHeroHandler(request: FastifyRequest, reply: FastifyReply) {
@@ -834,6 +901,28 @@ export async function getHomeSectionsHandler(request: FastifyRequest, reply: Fas
               },
             },
           },
+          workshop: {
+            select: {
+              id: true,
+              slug: true,
+              challenges: {
+                orderBy: { order: 'asc' },
+                select: {
+                  episodes: {
+                    where: {},
+                    orderBy: { order: 'asc' },
+                    take: 20,
+                    select: {
+                      id: true,
+                      order: true,
+                      title: true,
+                      durationSeconds: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
       },
     },
@@ -849,25 +938,48 @@ export async function getHomeSectionsHandler(request: FastifyRequest, reply: Fas
       requiredTier: s.requiredTier,
       isLocked: tierNum < s.requiredTier,
       lockLabel: tierNum < s.requiredTier ? (s.lockBadgeText ?? null) : null,
-      items: s.items.map((item) => ({
-        id: item.id,
-        title: item.title,
-        thumbnailUrl: item.thumbnailUrl ?? null,
-        requiredTier: item.requiredTier,
-        isLocked: tierNum < item.requiredTier,
-        lockBadgeText: tierNum < item.requiredTier ? (item.lockBadgeText ?? null) : null,
-        contentType: item.contentType,
-        categoryTag: item.categoryTag ?? null,
-        playUrl: item.playUrl ?? null,
-        episodeCount: item.course?.totalLessons ?? null,
-        episodes: (item.course?.courseEpisodes ?? []).map((ep) => ({
-          id: ep.id,
-          order: ep.order,
-          title: ep.title,
-          thumbnailUrl: ep.thumbnailUrl ?? null,
-          durationSeconds: ep.durationSeconds,
-        })),
-      })),
+      items: s.items.map((item) => {
+        const workshopEpisodes = (item.workshop?.challenges ?? []).flatMap(
+          (ch: any) => ch.episodes ?? []
+        );
+        const resolvedPlayUrl = item.workshop
+          ? `/workshop/${item.workshop.slug}`
+          : item.course
+            ? `/learning/${item.course.id}`
+            : (item.playUrl ?? null);
+
+        return {
+          id: item.id,
+          title: item.title,
+          thumbnailUrl: item.thumbnailUrl ?? null,
+          requiredTier: item.requiredTier,
+          isLocked: tierNum < item.requiredTier,
+          lockBadgeText: tierNum < item.requiredTier ? (item.lockBadgeText ?? null) : null,
+          contentType: item.contentType,
+          categoryTag: item.categoryTag ?? null,
+          playUrl: resolvedPlayUrl,
+          courseId: item.courseId ?? null,
+          workshopId: item.workshopId ?? null,
+          episodeCount: workshopEpisodes.length > 0
+            ? workshopEpisodes.length
+            : (item.course?.totalLessons ?? null),
+          episodes: workshopEpisodes.length > 0
+            ? workshopEpisodes.map((ep: any) => ({
+                id: ep.id,
+                order: ep.order,
+                title: ep.title,
+                thumbnailUrl: null,
+                durationSeconds: ep.durationSeconds ?? null,
+              }))
+            : (item.course?.courseEpisodes ?? []).map((ep) => ({
+                id: ep.id,
+                order: ep.order,
+                title: ep.title,
+                thumbnailUrl: ep.thumbnailUrl ?? null,
+                durationSeconds: ep.durationSeconds,
+              })),
+        };
+      }),
     })),
   });
 }
@@ -1186,7 +1298,16 @@ export async function postWorkshopQaHandler(request: FastifyRequest, reply: Fast
 
   const post = await request.server.prisma.qAPost.create({
     data: { workshopId: workshop.id, memberId: request.memberId, questionText: questionText.trim() },
-    select: { id: true, questionText: true, createdAt: true },
+    select: { id: true, questionText: true, createdAt: true, member: { select: { firstName: true, lastName: true } } },
+  });
+
+  const memberName = [post.member.firstName, post.member.lastName].filter(Boolean).join(' ');
+  request.server.io.to(`workshop:${slug}`).emit('qa:new_question', {
+    id: post.id,
+    questionText: post.questionText,
+    memberName,
+    createdAt: post.createdAt,
+    replies: [],
   });
 
   return reply.status(201).send({ success: true, data: post, error: null });
@@ -1198,12 +1319,24 @@ export async function postQaReplyHandler(request: FastifyRequest, reply: Fastify
 
   if (!replyText?.trim()) return fail(reply, 400, 'Reply text is required');
 
-  const post = await request.server.prisma.qAPost.findUnique({ where: { id: postId } });
+  const post = await request.server.prisma.qAPost.findUnique({
+    where: { id: postId },
+    select: { id: true, workshop: { select: { slug: true } } },
+  });
   if (!post) return fail(reply, 404, 'Post not found');
 
   const r = await request.server.prisma.qAReply.create({
     data: { postId, memberId: request.memberId, replyText: replyText.trim() },
     select: { id: true, replyText: true, createdAt: true },
+  });
+
+  request.server.io.to(`workshop:${post.workshop.slug}`).emit('qa:new_reply', {
+    postId,
+    reply: {
+      id: r.id,
+      replyText: r.replyText,
+      createdAt: r.createdAt,
+    },
   });
 
   return reply.status(201).send({ success: true, data: r, error: null });
@@ -1459,4 +1592,146 @@ export async function getUserResourcesHandler(request: FastifyRequest, reply: Fa
     })),
     pagination: { total, page: Number(page), limit: Number(limit) },
   });
+}
+
+// ─── Conversations (live chat) ────────────────────────────────────────────────
+
+export async function startConversationHandler(request: FastifyRequest, reply: FastifyReply) {
+  const { subject, body } = request.body as { subject: string; body: string };
+  const memberId = request.memberId!;
+
+  const conversation = await request.server.prisma.$transaction(async (tx) => {
+    const convo = await tx.conversation.create({
+      data: { memberId, subject, adminUnreadCount: 1, lastMessageAt: new Date() },
+    });
+    await tx.directMessage.create({
+      data: { conversationId: convo.id, memberId, senderId: memberId, senderType: 'member', body },
+    });
+    return convo;
+  });
+
+  const member = await request.server.prisma.member.findUnique({
+    where: { id: memberId },
+    select: { firstName: true, lastName: true },
+  });
+  const memberName = `${member?.firstName ?? ''} ${member?.lastName ?? ''}`.trim() || 'A member';
+
+  request.server.io.to('admin').emit('chat:conversation_new', {
+    conversationId: conversation.id,
+    memberName,
+    subject,
+  });
+
+  return reply.status(201).send({ success: true, data: { id: conversation.id }, error: null });
+}
+
+export async function listMemberConversationsHandler(request: FastifyRequest, reply: FastifyReply) {
+  const memberId = request.memberId!;
+
+  const conversations = await request.server.prisma.conversation.findMany({
+    where: { memberId },
+    orderBy: { lastMessageAt: 'desc' },
+    include: {
+      messages: {
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: { body: true, senderType: true, createdAt: true },
+      },
+    },
+  });
+
+  return ok(reply, conversations.map((c) => ({
+    id:                c.id,
+    subject:           c.subject,
+    status:            c.status,
+    memberUnreadCount: c.memberUnreadCount,
+    lastMessageAt:     c.lastMessageAt,
+    lastMessage:       c.messages[0] ?? null,
+  })));
+}
+
+export async function getMemberConversationMessagesHandler(request: FastifyRequest, reply: FastifyReply) {
+  const memberId = request.memberId!;
+  const { id } = request.params as { id: string };
+
+  const convo = await request.server.prisma.conversation.findFirst({ where: { id, memberId } });
+  if (!convo) return fail(reply, 404, 'Conversation not found');
+
+  await request.server.prisma.conversation.update({ where: { id }, data: { memberUnreadCount: 0 } });
+
+  const messages = await request.server.prisma.directMessage.findMany({
+    where: { conversationId: id },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  const adminIds = [...new Set(messages.filter((m) => m.senderType === 'admin').map((m) => m.senderId))];
+  const [admins, memberProfile] = await Promise.all([
+    adminIds.length > 0
+      ? request.server.prisma.admin.findMany({
+          where: { id: { in: adminIds } },
+          select: { id: true, fullName: true, profilePhotoUrl: true },
+        })
+      : Promise.resolve([]),
+    request.server.prisma.member.findUnique({
+      where: { id: memberId },
+      select: { firstName: true, lastName: true, profilePhotoUrl: true },
+    }),
+  ]);
+  const adminMap = Object.fromEntries(admins.map((a) => [a.id, a]));
+  const memberName = `${memberProfile?.firstName ?? ''} ${memberProfile?.lastName ?? ''}`.trim() || 'You';
+
+  const data = messages.map((m) => {
+    const admin = m.senderType === 'admin' ? adminMap[m.senderId] : null;
+    return {
+      id:              m.id,
+      senderType:      m.senderType,
+      senderId:        m.senderId,
+      senderName:      m.senderType === 'member' ? memberName : (admin?.fullName ?? 'TBT Team'),
+      senderAvatarUrl: m.senderType === 'member'
+        ? (memberProfile?.profilePhotoUrl ?? null)
+        : (admin?.profilePhotoUrl ?? null),
+      body:            m.body,
+      createdAt:       m.createdAt,
+    };
+  });
+
+  return ok(reply, data, { conversationId: id, status: convo.status, subject: convo.subject });
+}
+
+export async function sendMemberChatMessageHandler(request: FastifyRequest, reply: FastifyReply) {
+  const memberId = request.memberId!;
+  const { id } = request.params as { id: string };
+  const { body } = request.body as { body: string };
+
+  const convo = await request.server.prisma.conversation.findFirst({
+    where: { id, memberId, status: 'open' },
+  });
+  if (!convo) return fail(reply, 404, 'Conversation not found or closed');
+
+  const message = await request.server.prisma.$transaction(async (tx) => {
+    const msg = await tx.directMessage.create({
+      data: { conversationId: id, memberId, senderId: memberId, senderType: 'member', body },
+    });
+    await tx.conversation.update({
+      where: { id },
+      data: { lastMessageAt: new Date(), adminUnreadCount: { increment: 1 } },
+    });
+    return msg;
+  });
+
+  request.server.io.to(`conversation:${id}`).emit('chat:message', {
+    conversationId: id,
+    message: {
+      id:         message.id,
+      senderId:   memberId,
+      senderType: 'member',
+      senderName: 'Member',
+      body,
+      createdAt:  message.createdAt,
+    },
+  });
+
+  request.server.io.to('admin').emit('chat:unread_ping', { conversationId: id });
+
+  return reply.status(201).send({ success: true, data: { id: message.id }, error: null });
 }
